@@ -1,0 +1,44 @@
+@use "../styles/tokens" as t;
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: t.$bg-base;
+  color: t.$text-primary;
+  font-family: t.$font-body;
+  height: 100%;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: t.$border-subtle;
+  border-radius: 4px;
+}
+
+:focus-visible {
+  outline: 2px solid t.$accent-timer;
+  outline-offset: 2px;
+}

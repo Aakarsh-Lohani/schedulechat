@@ -1,0 +1,74 @@
+@use "../../styles/tokens" as t;
+
+.wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: t.$bg-base;
+}
+
+.card {
+  width: 320px;
+  background: t.$bg-panel;
+  border: 1px solid t.$border-subtle;
+  border-radius: t.$radius-md;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.brand {
+  font-family: t.$font-display;
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 4px;
+
+  span {
+    color: t.$accent-ai;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  color: t.$text-muted;
+
+  input {
+    background: t.$bg-elevated;
+    border: 1px solid t.$border-subtle;
+    border-radius: t.$radius-sm;
+    padding: 9px 10px;
+    color: t.$text-primary;
+    font-size: 13.5px;
+    outline: none;
+
+    &:focus {
+      border-color: t.$accent-timer;
+    }
+  }
+}
+
+.submit {
+  margin-top: 6px;
+  background: t.$accent-ai;
+  color: #181225;
+  border: none;
+  border-radius: t.$radius-sm;
+  padding: 10px 0;
+  font-weight: 700;
+  font-size: 13.5px;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.error {
+  color: t.$status-red;
+  font-size: 12px;
+}
