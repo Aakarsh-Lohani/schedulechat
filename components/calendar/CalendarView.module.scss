@@ -1,0 +1,117 @@
+@use "../../styles/tokens" as t;
+
+.wrap {
+  padding: 20px 22px;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.heading {
+  font-family: t.$font-display;
+  font-size: 17px;
+  font-weight: 500;
+  margin: 0 0 4px;
+}
+
+.sub {
+  color: t.$text-muted;
+  font-size: 12.5px;
+  margin: 0 0 18px;
+}
+
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 640px;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: 170px repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.dayLabel {
+  font-size: 11px;
+  color: t.$text-muted;
+  font-family: t.$font-mono;
+  text-align: center;
+  padding: 4px 0;
+
+  &.today {
+    color: t.$accent-timer;
+    font-weight: 600;
+  }
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 2px;
+  align-items: center;
+}
+
+.rowLabel {
+  font-size: 12px;
+  color: t.$text-primary;
+  padding-right: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  min-height: 30px;
+  background: t.$bg-panel;
+  border-radius: 6px;
+  position: relative;
+}
+
+.dayCell {
+  min-height: 30px;
+  border-radius: 4px;
+}
+
+.bar {
+  border-radius: 5px;
+  padding: 6px 9px;
+  font-size: 10.5px;
+  font-family: t.$font-mono;
+  color: #12151a;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: none;
+  touch-action: none;
+  position: relative;
+  z-index: 1;
+}
+
+.green {
+  background: t.$status-green;
+}
+.orange {
+  background: t.$status-orange;
+}
+.red {
+  background: t.$status-red;
+}
+.ai {
+  outline: 2px solid t.$accent-ai;
+  outline-offset: 1px;
+}
+
+.empty {
+  color: t.$text-muted;
+  font-size: 13px;
+}

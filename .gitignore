@@ -1,0 +1,8 @@
+node_modules/
+.next/
+log
+.env.local
+.env*.local
+*.tsbuildinfogit config user.name
+npm-debug.log*
+

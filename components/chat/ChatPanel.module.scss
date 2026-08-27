@@ -1,0 +1,241 @@
+@use "../../styles/tokens" as t;
+
+.chat {
+  background: t.$bg-panel;
+  border-left: 1px solid t.$border-subtle;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 360px;
+  flex-shrink: 0;
+
+  @media (max-width: 900px) {
+    width: 100%;
+    height: 46vh;
+    border-left: none;
+    border-top: 1px solid t.$border-subtle;
+  }
+}
+
+.head {
+  padding: 14px 16px;
+  border-bottom: 1px solid t.$border-subtle;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.title {
+  font-family: t.$font-display;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.modeToggle {
+  display: flex;
+  background: t.$bg-elevated;
+  border-radius: 999px;
+  padding: 3px;
+  font-size: 11.5px;
+}
+
+.modeBtn {
+  flex: 1;
+  text-align: center;
+  padding: 6px 0;
+  border-radius: 999px;
+  color: t.$text-muted;
+  cursor: pointer;
+  font-weight: 600;
+  background: none;
+  border: none;
+
+  &.active {
+    background: t.$accent-ai;
+    color: #181225;
+  }
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.msg {
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 92%;
+}
+
+.user {
+  align-self: flex-end;
+  background: t.$bg-elevated;
+  padding: 9px 12px;
+  border-radius: 10px 10px 2px 10px;
+}
+
+.assistant {
+  align-self: flex-start;
+  color: t.$text-primary;
+}
+
+.role {
+  font-size: 10.5px;
+  color: t.$accent-ai;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.approvalCard {
+  background: t.$bg-elevated;
+  border: 1px solid t.$accent-ai;
+  border-radius: t.$radius-md;
+  padding: 12px;
+  font-size: 12.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.approvalHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: t.$accent-ai;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.approvalSummary {
+  font-family: t.$font-mono;
+  font-size: 12px;
+  color: t.$text-primary;
+  background: t.$bg-panel;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.approvalActions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  border: none;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.approve {
+  background: t.$accent-ai;
+  color: #181225;
+}
+
+.reject {
+  background: none;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-muted;
+}
+
+.undoList {
+  padding: 10px 16px 4px;
+  border-top: 1px solid t.$border-subtle;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.undoHeading {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: t.$text-muted;
+  margin-bottom: 8px;
+}
+
+.undoItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  padding: 5px 0;
+  color: t.$text-muted;
+  gap: 8px;
+}
+
+.undoDesc {
+  color: t.$text-primary;
+  font-family: t.$font-mono;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undoBtn {
+  color: t.$accent-ai;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 11px;
+  background: none;
+  border: none;
+  flex-shrink: 0;
+
+  &:disabled {
+    color: t.$text-muted;
+    cursor: default;
+  }
+}
+
+.inputWrap {
+  padding: 12px 16px 16px;
+  border-top: 1px solid t.$border-subtle;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.textInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: t.$text-primary;
+  font-size: 13px;
+}
+
+.send {
+  color: t.$accent-ai;
+  font-weight: 700;
+  font-size: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  &:disabled {
+    color: t.$text-muted;
+    cursor: default;
+  }
+}
