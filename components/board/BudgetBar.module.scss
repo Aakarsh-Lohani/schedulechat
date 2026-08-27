@@ -1,0 +1,58 @@
+@use "../../styles/tokens" as t;
+
+.budget {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.track {
+  position: relative;
+  height: 7px;
+  border-radius: 4px;
+  background: t.$bg-elevated;
+}
+
+.fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.green {
+  background: t.$status-green;
+}
+.orange {
+  background: t.$status-orange;
+}
+.red {
+  background: t.$status-red;
+}
+
+.overflow {
+  position: absolute;
+  top: -2px;
+  right: -6px;
+  height: 11px;
+  width: 10px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(45deg, t.$status-red, t.$status-red 2px, #7a2a28 2px, #7a2a28 4px);
+}
+
+.labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: t.$text-muted;
+  font-family: t.$font-mono;
+}
+
+.warn {
+  color: t.$status-orange;
+  font-weight: 600;
+}
+
+.over {
+  color: t.$status-red;
+  font-weight: 600;
+}

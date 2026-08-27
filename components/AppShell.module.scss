@@ -1,0 +1,16 @@
+@use "../styles/tokens" as t;
+
+.app {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  height: 100vh;
+}
+
+.main {
+  display: flex;
+  min-height: 0;
+
+  @media (max-width: 900px) {
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,129 @@
+@use "../../styles/tokens" as t;
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 22px;
+  border-bottom: 1px solid t.$border-subtle;
+  background: t.$bg-panel;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.brand {
+  font-family: t.$font-display;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+
+  span {
+    color: t.$accent-ai;
+  }
+}
+
+.timers {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  border-radius: 999px;
+  padding: 6px 14px 6px 8px;
+  min-width: 200px;
+
+  &.over {
+    border-color: t.$status-orange;
+  }
+  &.dropTarget {
+    border-color: t.$accent-ai;
+    box-shadow: 0 0 0 1px t.$accent-ai-dim;
+  }
+}
+
+.ring {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: conic-gradient(t.$accent-timer 0deg 260deg, t.$border-subtle 260deg 360deg);
+  position: relative;
+  flex-shrink: 0;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    background: t.$bg-elevated;
+    border-radius: 50%;
+  }
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: t.$text-muted;
+}
+
+.taskName {
+  font-size: 11px;
+  color: t.$accent-timer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+
+.value {
+  font-family: t.$font-mono;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.idle {
+  color: t.$text-muted;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+.actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.miniBtn {
+  background: none;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-muted;
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-size: 10.5px;
+  cursor: pointer;
+
+  &:hover {
+    color: t.$text-primary;
+  }
+}
+
+.today {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  padding-left: 10px;
+  border-left: 1px solid t.$border-subtle;
+}

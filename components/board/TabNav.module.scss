@@ -1,0 +1,72 @@
+@use "../../styles/tokens" as t;
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 22px;
+  border-bottom: 1px solid t.$border-subtle;
+  background: t.$bg-base;
+  overflow-x: auto;
+}
+
+.tab {
+  padding: 12px 14px;
+  font-size: 13.5px;
+  color: t.$text-muted;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  font-weight: 500;
+
+  &.active {
+    color: t.$text-primary;
+    border-bottom-color: t.$accent-timer;
+  }
+
+  &.dropTarget {
+    background: t.$accent-ai-dim;
+    border-radius: 6px 6px 0 0;
+  }
+}
+
+.dot {
+  color: t.$accent-timer;
+  font-size: 9px;
+  margin-right: 4px;
+}
+
+.addBtn {
+  margin-left: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px dashed t.$border-subtle;
+  background: none;
+  color: t.$text-muted;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.chatToggle {
+  margin-left: auto;
+  padding: 6px 12px;
+  border: 1px solid t.$border-subtle;
+  border-radius: 999px;
+  background: none;
+  color: t.$text-muted;
+  font-size: 11.5px;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &.active {
+    color: t.$accent-ai;
+    border-color: t.$accent-ai;
+  }
+}
