@@ -9,7 +9,6 @@ type MongooseCache = {
 // Reuse the connection across hot-reloads in dev, and across serverless
 // invocations that share a warm container in production.
 declare global {
-  // eslint-disable-next-line no-var
   var __scheduleChatMongoose: MongooseCache | undefined;
 }
 

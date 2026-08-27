@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, type Content, type FunctionDeclarationsTool, type Part } from "@google/generative-ai";
+import { GoogleGenerativeAI, type Content, type FunctionDeclarationSchema, type FunctionDeclarationsTool, type Part } from "@google/generative-ai";
 import { getEnv } from "@/lib/env";
 import { buildToolsForMode } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/providers/common";
@@ -29,7 +29,10 @@ function toGeminiTools(mode: "suggest" | "update"): FunctionDeclarationsTool[] {
       functionDeclarations: tools.map((t) => ({
         name: t.name,
         description: t.description,
-        parameters: t.input_schema as any,
+        // Our JSON Schema tool definitions use the same lowercase type strings
+        // Gemini's OpenAPI-subset schema expects — safe structurally, but the two
+        // types aren't nominally related, hence the through-unknown cast.
+        parameters: t.input_schema as unknown as FunctionDeclarationSchema,
       })),
     },
   ];

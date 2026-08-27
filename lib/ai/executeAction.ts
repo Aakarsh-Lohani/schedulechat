@@ -11,7 +11,7 @@ export async function executeApprovedAction(
   action: Pick<AIActionDoc, "type" | "proposedPayload">,
   userId: string
 ): Promise<Record<string, unknown> | null> {
-  const payload = action.proposedPayload as Record<string, any>;
+  const payload = action.proposedPayload as Record<string, unknown>;
 
   switch (action.type) {
     case "create-task": {
@@ -81,8 +81,8 @@ export async function undoExecutedAction(
   action: Pick<AIActionDoc, "type" | "proposedPayload" | "beforeSnapshot" | "afterSnapshot">,
   userId: string
 ): Promise<void> {
-  const before = action.beforeSnapshot as Record<string, any> | null;
-  const after = action.afterSnapshot as Record<string, any> | null;
+  const before = action.beforeSnapshot as Record<string, unknown> | null;
+  const after = action.afterSnapshot as Record<string, unknown> | null;
 
   switch (action.type) {
     case "create-task": {
@@ -103,6 +103,7 @@ export async function undoExecutedAction(
     case "archive-task": {
       if (before && before._id) {
         const { _id, __v, ...rest } = before;
+        void __v; // discarded — Mongoose's internal version key, not part of the restore payload
         await Task.findOneAndUpdate({ _id, userId }, { $set: rest });
       }
       return;

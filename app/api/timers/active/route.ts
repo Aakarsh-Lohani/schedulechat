@@ -28,10 +28,11 @@ export async function GET() {
   const slots: Record<1 | 2, unknown> = { 1: null, 2: null };
   for (const s of activeSessions) {
     const slotNum = s.slot as 1 | 2;
+    const populatedTask = s.taskId as unknown as { _id: unknown; title?: string } | null;
     slots[slotNum] = {
       id: String(s._id),
-      taskId: String((s.taskId as any)?._id ?? s.taskId),
-      taskTitle: (s.taskId as any)?.title ?? "Task",
+      taskId: String(populatedTask?._id ?? s.taskId),
+      taskTitle: populatedTask?.title ?? "Task",
       status: s.status,
       startedAt: s.startedAt,
       countdownEndsAt: s.countdownEndsAt,

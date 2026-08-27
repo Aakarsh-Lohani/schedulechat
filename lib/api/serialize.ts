@@ -1,4 +1,34 @@
-export function serializeTask(t: any) {
+interface LeanTaskLike {
+  _id: unknown;
+  tabId: unknown;
+  title: string;
+  description?: string;
+  source: string;
+  aiAccepted: boolean;
+  status: string;
+  estimateMinutes: number;
+  defaultTimerMinutes: number;
+  progressPercent: number;
+  totalTrackedSeconds: number;
+  scheduledDate?: Date | null;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  order: number;
+}
+
+interface LeanTimerSessionLike {
+  _id: unknown;
+  taskId: unknown;
+  slot: number;
+  startedAt: Date;
+  countdownEndsAt?: Date | null;
+  plannedDurationSeconds: number;
+  extendedBySeconds: number;
+  status: string;
+  contributedSeconds: number;
+}
+
+export function serializeTask(t: LeanTaskLike) {
   return {
     id: String(t._id),
     tabId: String(t.tabId),
@@ -18,7 +48,7 @@ export function serializeTask(t: any) {
   };
 }
 
-export function serializeSession(s: any) {
+export function serializeSession(s: LeanTimerSessionLike) {
   return {
     id: String(s._id),
     taskId: String(s.taskId),
@@ -31,3 +61,4 @@ export function serializeSession(s: any) {
     contributedSeconds: s.contributedSeconds,
   };
 }
+

@@ -1,3 +1,6 @@
+import { config } from "dotenv";
+config({ path: ".env.local" });
+
 import bcrypt from "bcryptjs";
 import { connectDB } from "../lib/db/connect";
 import { User } from "../lib/db/models/User";
