@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useUIStore } from "@/lib/store/uiStore";
 import {
   useAiActions,
@@ -20,8 +20,7 @@ interface LocalMessage {
 export function ChatPanel() {
   const { chatMode, setChatMode } = useUIStore();
   const { data: history } = useChatHistory();
-  const [messages, setMessages] = useState<LocalMessage[]>([]);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [newMessages, setNewMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
   const sendChat = useSendChat();
   const { data: actions } = useAiActions();
@@ -29,21 +28,17 @@ export function ChatPanel() {
   const rejectAction = useRejectAction();
   const undoAction = useUndoAction();
 
-  // Load prior turns once on mount so a page refresh doesn't lose the visible thread.
-  useEffect(() => {
-    if (history && !historyLoaded) {
-      setMessages(history);
-      setHistoryLoaded(true);
-    }
-  }, [history, historyLoaded]);
+  // Rendered history is the persisted thread plus whatever's been sent this session —
+  // derived directly at render time rather than copied into state via an effect.
+  const messages = [...(history ?? []), ...newMessages];
 
   async function handleSend() {
     const text = input.trim();
     if (!text || sendChat.isPending) return;
     setInput("");
-    setMessages((m) => [...m, { role: "user", content: text }]);
+    setNewMessages((m) => [...m, { role: "user", content: text }]);
     const result = await sendChat.mutateAsync({ message: text, mode: chatMode });
-    setMessages((m) => [...m, { role: "assistant", content: result.reply }]);
+    setNewMessages((m) => [...m, { role: "assistant", content: result.reply }]);
   }
 
   const proposed = (actions ?? []).filter((a) => a.status === "proposed");

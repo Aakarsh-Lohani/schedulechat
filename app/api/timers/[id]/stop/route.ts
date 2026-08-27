@@ -7,7 +7,8 @@ import { objectIdString } from "@/lib/validation/schemas";
 import { emit } from "@/lib/realtime/emitter";
 import { COUNTDOWN_SECONDS } from "@/lib/timers/constants";
 
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+export async function POST(_req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   if (!objectIdString.safeParse(params.id).success) {

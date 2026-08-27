@@ -15,11 +15,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         {/* Loaded at runtime via CDN link (not next/font) so the build never needs
             network access to Google Fonts — see log/mockups/00-design-notes.md.
-            eslint-disable-next-line: this rule predates the App Router, where a
-            <link> in the root layout is the supported pattern, not a per-page hack. */}
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+            This rule predates the App Router; a <link> in the root layout (which
+            wraps every page) is the supported pattern here, not the per-page
+            anti-pattern the rule exists to catch — safe to ignore this warning. */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link
           href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"

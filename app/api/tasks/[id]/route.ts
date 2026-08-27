@@ -6,7 +6,8 @@ import { updateTaskSchema, objectIdString } from "@/lib/validation/schemas";
 import { emit } from "@/lib/realtime/emitter";
 import { serializeTask } from "@/lib/api/serialize";
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   if (!objectIdString.safeParse(params.id).success) {
@@ -27,7 +28,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 /** Human-initiated hard delete — separate from the AI's soft-delete-only tool set. */
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   if (!objectIdString.safeParse(params.id).success) {

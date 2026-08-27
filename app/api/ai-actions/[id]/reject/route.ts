@@ -4,7 +4,8 @@ import { getCurrentUserId } from "@/lib/session";
 import { AIAction } from "@/lib/db/models/AIAction";
 import { objectIdString } from "@/lib/validation/schemas";
 
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+export async function POST(_req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   if (!objectIdString.safeParse(params.id).success) {

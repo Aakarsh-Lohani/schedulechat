@@ -6,7 +6,8 @@ import { Task } from "@/lib/db/models/Task";
 import { updateTabSchema, objectIdString } from "@/lib/validation/schemas";
 import { emit } from "@/lib/realtime/emitter";
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   if (!objectIdString.safeParse(params.id).success) {
@@ -27,7 +28,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 /** Soft-delete: archives the tab and moves its tasks to no tab (Unfiled) — human-initiated, explicit. */
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   if (!objectIdString.safeParse(params.id).success) {

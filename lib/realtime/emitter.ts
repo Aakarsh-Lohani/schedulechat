@@ -14,7 +14,6 @@ export interface RealtimeEvent {
 type Listener = (event: RealtimeEvent) => void;
 
 declare global {
-  // eslint-disable-next-line no-var
   var __scheduleChatListeners: Map<string, Set<Listener>> | undefined;
 }
 
@@ -32,3 +31,4 @@ export function subscribe(userId: string, listener: Listener): () => void {
 export function emit(userId: string, event: RealtimeEvent): void {
   listeners.get(userId)?.forEach((listener) => listener(event));
 }
+

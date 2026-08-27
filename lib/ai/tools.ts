@@ -29,6 +29,11 @@ interface ProposeToolDef<TInput> {
   handler: (userId: string, input: TInput) => Promise<ToolProposal>;
 }
 
+// A tool registry inherently holds heterogeneous input types per entry (each tool's
+// Zod schema and handler are mutually consistent, but different from every other
+// tool's) — `any` here is the correct escape hatch, not a type-safety gap; every
+// individual TOOLS[name] entry above is still fully and correctly typed.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolDef = ReadToolDef<any> | ProposeToolDef<any>;
 
 async function resolveTabId(userId: string, tabIdOrName: string): Promise<string> {
