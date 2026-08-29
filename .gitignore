@@ -3,6 +3,6 @@ node_modules/
 log
 .env.local
 .env*.local
-*.tsbuildinfogit config user.name
+*.tsbuildinfo
 npm-debug.log*
 
