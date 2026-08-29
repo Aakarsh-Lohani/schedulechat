@@ -4,7 +4,7 @@
  * Mongo change-stream or Redis pub/sub behind the same emit()/subscribe() interface.
  */
 
-export type RealtimeEventType = "task-updated" | "timer-changed" | "ai-action-executed" | "ai-action-undone";
+export type RealtimeEventType = "task-updated" | "tabs-updated" | "timer-changed" | "ai-action-executed" | "ai-action-undone";
 
 export interface RealtimeEvent {
   type: RealtimeEventType;
@@ -31,4 +31,3 @@ export function subscribe(userId: string, listener: Listener): () => void {
 export function emit(userId: string, event: RealtimeEvent): void {
   listeners.get(userId)?.forEach((listener) => listener(event));
 }
-
