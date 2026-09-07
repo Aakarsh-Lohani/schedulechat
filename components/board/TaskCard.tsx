@@ -17,17 +17,29 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
 
+  const scheduledLabel = task.scheduledDate
+    ? new Date(task.scheduledDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    : null;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={`${styles.card} ${isDragging ? styles.dragging : ""}`}
-      {...listeners}
-      {...attributes}
     >
       <div className={styles.top}>
-        <button type="button" className={styles.title} onClick={() => onOpen(task)}>
-          {task.title}
+        <span className={styles.dragHandle} {...listeners} {...attributes} title="Drag to reorder">
+          ⠿
+        </span>
+        <span className={styles.title}>{task.title}</span>
+        <button
+          type="button"
+          className={styles.editBtn}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => onOpen(task)}
+          title="Edit task"
+        >
+          ✏️
         </button>
         <span className={`${styles.tag} ${task.source === "ai-suggested" ? styles.tagAi : ""}`}>
           {task.source === "ai-suggested" && !task.aiAccepted ? "AI suggested" : task.status}
@@ -62,6 +74,7 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
 
       <div className={styles.metaRow}>
         <span>timer: {task.defaultTimerMinutes}m</span>
+        {scheduledLabel && <span>📅 {scheduledLabel}</span>}
         <span>{task.status}</span>
       </div>
     </div>

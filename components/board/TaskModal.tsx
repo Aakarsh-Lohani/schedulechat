@@ -11,6 +11,15 @@ interface Props {
   onClose: () => void;
 }
 
+/** Convert an ISO date string (or null) to the value format used by datetime-local inputs. */
+function toDatetimeLocalValue(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  // datetime-local expects YYYY-MM-DDTHH:MM
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function TaskModal({ task, defaultTabId, onClose }: Props) {
   const { data: tabs } = useTabs();
   const createTask = useCreateTask();
@@ -21,13 +30,32 @@ export function TaskModal({ task, defaultTabId, onClose }: Props) {
   const [estimateMinutes, setEstimateMinutes] = useState(task?.estimateMinutes ?? 30);
   const [defaultTimerMinutes, setDefaultTimerMinutes] = useState(task?.defaultTimerMinutes ?? 30);
   const [description, setDescription] = useState(task?.description ?? "");
+  const [scheduledDate, setScheduledDate] = useState(toDatetimeLocalValue(task?.scheduledDate));
 
   async function handleSave() {
     if (!title.trim() || !tabId) return;
+
+    const scheduledDateISO = scheduledDate ? new Date(scheduledDate).toISOString() : null;
+
     if (task) {
-      await updateTask.mutateAsync({ id: task.id, title, tabId, estimateMinutes, defaultTimerMinutes, description });
+      await updateTask.mutateAsync({
+        id: task.id,
+        title,
+        tabId,
+        estimateMinutes,
+        defaultTimerMinutes,
+        description,
+        scheduledDate: scheduledDateISO,
+      });
     } else {
-      await createTask.mutateAsync({ title, tabId, estimateMinutes, defaultTimerMinutes, description });
+      await createTask.mutateAsync({
+        title,
+        tabId,
+        estimateMinutes,
+        defaultTimerMinutes,
+        description,
+        scheduledDate: scheduledDateISO,
+      });
     }
     onClose();
   }
@@ -68,6 +96,15 @@ export function TaskModal({ task, defaultTabId, onClose }: Props) {
             />
           </label>
         </div>
+
+        <label className={styles.field}>
+          Scheduled date
+          <input
+            type="datetime-local"
+            value={scheduledDate}
+            onChange={(e) => setScheduledDate(e.target.value)}
+          />
+        </label>
 
         <label className={styles.field}>
           Notes

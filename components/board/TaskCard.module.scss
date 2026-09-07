@@ -8,8 +8,6 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  cursor: grab;
-  touch-action: none;
 
   &.dragging {
     opacity: 0.4;
@@ -23,15 +21,52 @@
   gap: 8px;
 }
 
+.dragHandle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  font-size: 14px;
+  line-height: 1;
+  color: t.$text-muted;
+  flex-shrink: 0;
+  padding: 2px;
+  border-radius: 4px;
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &:hover {
+    background: t.$bg-elevated;
+  }
+}
+
 .title {
   font-size: 13.5px;
   font-weight: 600;
   line-height: 1.35;
+  color: inherit;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.editBtn {
   background: none;
   border: none;
-  color: inherit;
-  text-align: left;
-  padding: 0;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+
+  &:hover {
+    opacity: 1;
+    background: t.$bg-elevated;
+  }
 }
 
 .tag {
@@ -72,6 +107,7 @@
 
 .progressInput {
   width: 100%;
+  touch-action: auto;
 }
 
 .progressPct {

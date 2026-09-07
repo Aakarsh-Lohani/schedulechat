@@ -8,6 +8,17 @@
   border-bottom: 1px solid t.$border-subtle;
   background: t.$bg-base;
   overflow-x: auto;
+  position: relative;
+}
+
+.tabWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+
+  &:hover .deleteTabBtn {
+    opacity: 1;
+  }
 }
 
 .tab {
@@ -29,6 +40,31 @@
   &.dropTarget {
     background: t.$accent-ai-dim;
     border-radius: 6px 6px 0 0;
+  }
+}
+
+.deleteTabBtn {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: t.$bg-elevated;
+  color: t.$text-muted;
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  &:hover {
+    background: #d32f2f;
+    color: #fff;
   }
 }
 
@@ -68,5 +104,65 @@
   &.active {
     color: t.$accent-ai;
     border-color: t.$accent-ai;
+  }
+}
+
+// --- Confirm delete overlay ---
+.confirmOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.confirmBox {
+  background: t.$bg-panel;
+  border: 1px solid t.$border-subtle;
+  border-radius: t.$radius-md;
+  padding: 20px;
+  min-width: 280px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  p {
+    margin: 0;
+    font-size: 14px;
+  }
+}
+
+.confirmWarn {
+  color: #d32f2f;
+  font-size: 12px !important;
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+
+  button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid t.$border-subtle;
+    background: none;
+    color: t.$text-muted;
+    font-size: 12px;
+    cursor: pointer;
+  }
+}
+
+.confirmDeleteBtn {
+  background: #d32f2f !important;
+  color: #fff !important;
+  border-color: transparent !important;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed !important;
   }
 }

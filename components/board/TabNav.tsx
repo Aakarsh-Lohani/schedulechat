@@ -2,42 +2,81 @@
 
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { useCreateTab, useTabs } from "@/lib/api/hooks";
+import { useCreateTab, useDeleteTab, useTabs, useTasks } from "@/lib/api/hooks";
 import { useUIStore } from "@/lib/store/uiStore";
 import type { BoardView } from "@/lib/store/uiStore";
 import styles from "./TabNav.module.scss";
 
-function NavItem({ id, label, active, onClick, droppableId }: {
+function NavItem({ id, label, active, onClick, droppableId, showDelete, onDelete }: {
   id: string;
   label: string;
   active: boolean;
   onClick: () => void;
   droppableId?: string;
+  showDelete?: boolean;
+  onDelete?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: droppableId ?? `nav:${id}`, disabled: !droppableId });
   return (
-    <button
-      ref={droppableId ? setNodeRef : undefined}
-      type="button"
-      className={`${styles.tab} ${active ? styles.active : ""} ${isOver ? styles.dropTarget : ""}`}
-      onClick={onClick}
-    >
-      {label}
-    </button>
+    <div className={styles.tabWrapper}>
+      <button
+        ref={droppableId ? setNodeRef : undefined}
+        type="button"
+        className={`${styles.tab} ${active ? styles.active : ""} ${isOver ? styles.dropTarget : ""}`}
+        onClick={onClick}
+      >
+        {label}
+      </button>
+      {showDelete && (
+        <button
+          type="button"
+          className={styles.deleteTabBtn}
+          onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
+          title="Delete tab"
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }
 
 export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: (v: BoardView) => void }) {
   const { data: tabs } = useTabs();
   const createTab = useCreateTab();
+  const deleteTab = useDeleteTab();
   const { chatPanelOpen, toggleChatPanel } = useUIStore();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Fetch tasks for the tab being deleted to check if empty
+  const tabToDelete = tabs?.find((t) => t.id === confirmDeleteId);
+  const { data: tabTasks } = useTasks(
+    { tabId: confirmDeleteId ?? undefined },
+    `delete-check-${confirmDeleteId}`
+  );
 
   function submitNewTab() {
     if (name.trim()) createTab.mutate(name.trim());
     setName("");
     setAdding(false);
+  }
+
+  function handleDeleteTab(tabId: string) {
+    setConfirmDeleteId(tabId);
+  }
+
+  function confirmDelete() {
+    if (!confirmDeleteId) return;
+    if (tabTasks && tabTasks.length > 0) {
+      alert("Move or delete all tasks from this tab before deleting it.");
+      setConfirmDeleteId(null);
+      return;
+    }
+    deleteTab.mutate(confirmDeleteId);
+    if (view === confirmDeleteId) onChangeView("today");
+    setConfirmDeleteId(null);
   }
 
   return (
@@ -51,6 +90,8 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
           active={view === tab.id}
           onClick={() => onChangeView(tab.id)}
           droppableId={`tab:${tab.id}`}
+          showDelete={!tab.isSystemDefault}
+          onDelete={() => handleDeleteTab(tab.id)}
         />
       ))}
       <NavItem id="calendar" label="🗓 Calendar" active={view === "calendar"} onClick={() => onChangeView("calendar")} />
@@ -78,6 +119,29 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
       >
         {chatPanelOpen ? "Hide copilot" : "Show copilot"}
       </button>
+
+      {/* Confirm delete dialog */}
+      {confirmDeleteId && (
+        <div className={styles.confirmOverlay} onClick={() => setConfirmDeleteId(null)}>
+          <div className={styles.confirmBox} onClick={(e) => e.stopPropagation()}>
+            <p>Delete tab &quot;{tabToDelete?.name}&quot;?</p>
+            {tabTasks && tabTasks.length > 0 && (
+              <p className={styles.confirmWarn}>This tab has {tabTasks.length} task(s). Move or delete them first.</p>
+            )}
+            <div className={styles.confirmActions}>
+              <button type="button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>
+              <button
+                type="button"
+                className={styles.confirmDeleteBtn}
+                onClick={confirmDelete}
+                disabled={!!(tabTasks && tabTasks.length > 0)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }
