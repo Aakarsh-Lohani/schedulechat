@@ -1,33 +1,43 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { RealtimeEventType } from "@/lib/realtime/emitter";
 
 const EVENT_TO_QUERY_KEYS: Record<RealtimeEventType, string[][]> = {
   "task-updated": [["tasks"], ["calendar-tasks"]],
   "tabs-updated": [["tabs"]],
-  "timer-changed": [["timers", "active"], ["tasks"]],
-  "ai-action-executed": [["tasks"], ["calendar-tasks"], ["timers", "active"], ["ai-actions"]],
-  "ai-action-undone": [["tasks"], ["calendar-tasks"], ["timers", "active"], ["ai-actions"]],
+  "timer-changed": [["timers", "active"], ["tasks"], ["calendar-tasks"]],
+  "ai-action-executed": [["tasks"], ["calendar-tasks"], ["timers", "active"], ["ai-actions"], ["tabs"]],
+  "ai-action-undone": [["tasks"], ["calendar-tasks"], ["timers", "active"], ["ai-actions"], ["tabs"]],
 };
 
-// A dropped SSE connection is EXPECTED on serverless hosts (e.g. Vercel kills a
-// function after its max execution duration, unrelated to anything going wrong)
-// — so a single disconnect must not be treated as fatal. Only fall back to
-// polling after several reconnect attempts fail in a row.
-const MAX_CONSECUTIVE_FAILURES = 4;
-const RECONNECT_DELAY_MS = 2000;
+const ALL_SYNC_QUERY_KEYS: string[][] = [
+  ["tasks"],
+  ["calendar-tasks"],
+  ["tabs"],
+  ["timers", "active"],
+  ["ai-actions"],
+];
+
+const MAX_CONSECUTIVE_FAILURES = 5;
+const BASE_RECONNECT_MS = 1000;
+const MAX_RECONNECT_MS = 30000;
 const POLL_INTERVAL_MS = 15000;
 
-/**
- * Subscribes to /api/events and invalidates the relevant TanStack Query caches
- * whenever the server reports a change. Reconnects automatically on a dropped
- * connection (normal on serverless hosts), and only falls back to periodic
- * polling if reconnects keep failing.
- */
+function calculateBackoff(attempt: number): number {
+  const exponential = Math.min(MAX_RECONNECT_MS, BASE_RECONNECT_MS * Math.pow(1.5, attempt));
+  const jitter = Math.random() * 1000;
+  return exponential + jitter;
+}
+
 export function useRealtimeSync() {
   const queryClient = useQueryClient();
+  const queryClientRef = useRef(queryClient);
+
+  useEffect(() => {
+    queryClientRef.current = queryClient;
+  }, [queryClient]);
 
   useEffect(() => {
     let source: EventSource | null = null;
@@ -35,11 +45,12 @@ export function useRealtimeSync() {
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let consecutiveFailures = 0;
     let stopped = false;
+    let hasConnectedOnce = false;
 
     const invalidateAll = () => {
-      Object.values(EVENT_TO_QUERY_KEYS)
-        .flat()
-        .forEach((key) => queryClient.invalidateQueries({ queryKey: key }));
+      ALL_SYNC_QUERY_KEYS.forEach((key) => {
+        queryClientRef.current.invalidateQueries({ queryKey: key });
+      });
     };
 
     const startPolling = () => {
@@ -47,53 +58,93 @@ export function useRealtimeSync() {
       pollTimer = setInterval(invalidateAll, POLL_INTERVAL_MS);
     };
 
+    const stopPolling = () => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+
     const connect = () => {
       if (stopped) return;
-      source = new EventSource("/api/events");
 
-      source.onopen = () => {
-        consecutiveFailures = 0;
-        // If we'd fallen back to polling during earlier failed attempts, a
-        // successful reconnect means SSE is healthy again — stop polling.
-        if (pollTimer) {
-          clearInterval(pollTimer);
-          pollTimer = null;
-        }
-      };
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
 
-      source.onmessage = (evt) => {
-        try {
-          const parsed = JSON.parse(evt.data) as { type: RealtimeEventType };
-          const keys = EVENT_TO_QUERY_KEYS[parsed.type] ?? [];
-          keys.forEach((key) => queryClient.invalidateQueries({ queryKey: key }));
-        } catch {
-          // ignore malformed events (e.g. keep-alive comments)
-        }
-      };
+      if (source) {
+        source.close();
+        source = null;
+      }
 
-      source.onerror = () => {
-        source?.close();
+      try {
+        source = new EventSource("/api/events");
+
+        source.onopen = () => {
+          if (hasConnectedOnce || consecutiveFailures > 0) {
+            invalidateAll();
+          }
+          hasConnectedOnce = true;
+          consecutiveFailures = 0;
+          stopPolling();
+        };
+
+        source.onmessage = (evt) => {
+          try {
+            const parsed = JSON.parse(evt.data) as { type: RealtimeEventType };
+            const keys = EVENT_TO_QUERY_KEYS[parsed.type] ?? [];
+            keys.forEach((key) => queryClientRef.current.invalidateQueries({ queryKey: key }));
+          } catch {
+            // ignore malformed events (e.g. keep-alive comments)
+          }
+        };
+
+        source.onerror = () => {
+          if (source) {
+            source.close();
+            source = null;
+          }
+          consecutiveFailures += 1;
+
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            startPolling();
+          }
+
+          const delay = calculateBackoff(consecutiveFailures);
+          reconnectTimer = setTimeout(connect, delay);
+        };
+      } catch {
         consecutiveFailures += 1;
-
-        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-          startPolling();
-          // Keep trying to reconnect in the background even while polling, so
-          // we can drop back to realtime SSE the moment it's healthy again.
-          reconnectTimer = setTimeout(connect, POLL_INTERVAL_MS);
-          return;
-        }
-
-        reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
-      };
+        const delay = calculateBackoff(consecutiveFailures);
+        reconnectTimer = setTimeout(connect, delay);
+      }
     };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        if (!source || source.readyState === EventSource.CLOSED) {
+          connect();
+        }
+      }
+    };
+
+    const handleOnline = () => {
+      connect();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", handleOnline);
 
     connect();
 
     return () => {
       stopped = true;
-      source?.close();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", handleOnline);
+      if (source) source.close();
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (pollTimer) clearInterval(pollTimer);
+      stopPolling();
     };
-  }, [queryClient]);
+  }, []);
 }

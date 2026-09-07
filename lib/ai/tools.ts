@@ -43,10 +43,21 @@ async function resolveTabId(userId: string, tabIdOrName: string): Promise<string
   return String(tab._id);
 }
 
-function startOfToday(): Date {
+function startOfToday(tzOffsetMinutes?: number): Date {
+  if (tzOffsetMinutes !== undefined && !isNaN(tzOffsetMinutes)) {
+    const nowUtcMs = Date.now();
+    const clientLocalTimeMs = nowUtcMs - tzOffsetMinutes * 60 * 1000;
+    const clientDate = new Date(clientLocalTimeMs);
+    return new Date(Date.UTC(clientDate.getUTCFullYear(), clientDate.getUTCMonth(), clientDate.getUTCDate()) + tzOffsetMinutes * 60 * 1000);
+  }
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d;
+}
+
+function endOfToday(tzOffsetMinutes?: number): Date {
+  const start = startOfToday(tzOffsetMinutes);
+  return new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
 }
 
 // ---- Read tools ----
@@ -54,6 +65,7 @@ function startOfToday(): Date {
 const getTasksSchema = z.object({
   tabName: z.string().optional(),
   scheduledToday: z.boolean().optional(),
+  tzOffset: z.number().optional(),
 });
 
 const getTimeSummarySchema = z.object({});
@@ -70,6 +82,7 @@ const proposeCreateTaskSchema = z.object({
   estimateMinutes: z.number().min(1).max(24 * 60).default(30),
   defaultTimerMinutes: z.number().min(1).max(240).default(30),
   scheduleForToday: z.boolean().default(false),
+  tzOffset: z.number().optional(),
 });
 
 const proposeUpdateTaskSchema = z.object({
@@ -88,6 +101,7 @@ const proposeMoveTaskSchema = z.object({
 const proposeSetScheduleSchema = z.object({
   taskId: z.string(),
   scheduleForToday: z.boolean(),
+  tzOffset: z.number().optional(),
 });
 
 const proposeCreateTabSchema = z.object({
@@ -108,13 +122,19 @@ export const TOOLS: Record<string, ToolDef> = {
       properties: {
         tabName: { type: "string", description: "Filter to a specific tab, e.g. 'DSA'" },
         scheduledToday: { type: "boolean", description: "If true, only tasks scheduled for today" },
+        tzOffset: { type: "number", description: "Client timezone offset in minutes" },
       },
     },
     zodSchema: getTasksSchema,
     handler: async (userId, input) => {
       const query: Record<string, unknown> = { userId, status: { $ne: "archived" } };
       if (input.tabName) query.tabId = await resolveTabId(userId, input.tabName);
-      if (input.scheduledToday) query.scheduledDate = { $gte: startOfToday() };
+      if (input.scheduledToday) {
+        query.scheduledDate = {
+          $gte: startOfToday(input.tzOffset),
+          $lte: endOfToday(input.tzOffset),
+        };
+      }
       const tasks = await Task.find(query).limit(50).lean();
       return tasks.map((t) => ({
         id: String(t._id),
@@ -204,7 +224,7 @@ export const TOOLS: Record<string, ToolDef> = {
           title: input.title,
           estimateMinutes: input.estimateMinutes,
           defaultTimerMinutes: input.defaultTimerMinutes,
-          scheduledDate: input.scheduleForToday ? startOfToday().toISOString() : null,
+          scheduledDate: input.scheduleForToday ? startOfToday(input.tzOffset).toISOString() : null,
           source: "ai-suggested",
         },
         beforeSnapshot: null,
@@ -282,7 +302,7 @@ export const TOOLS: Record<string, ToolDef> = {
         }`.trim(),
         proposedPayload: {
           taskId: input.taskId,
-          scheduledDate: input.scheduleForToday ? startOfToday().toISOString() : null,
+          scheduledDate: input.scheduleForToday ? startOfToday(input.tzOffset).toISOString() : null,
         },
         beforeSnapshot: JSON.parse(JSON.stringify(task)),
       };

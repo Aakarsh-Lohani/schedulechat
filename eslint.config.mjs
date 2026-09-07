@@ -5,6 +5,11 @@ const eslintConfig = [
   ...coreWebVitals,
   ...nextTypescript,
   {
+    rules: {
+      "@next/next/no-page-custom-font": "off",
+    },
+  },
+  {
     ignores: ["log/**", "node_modules/**", ".next/**"],
   },
 ];

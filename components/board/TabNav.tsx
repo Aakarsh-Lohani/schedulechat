@@ -31,7 +31,12 @@ function NavItem({ id, label, active, onClick, droppableId, showDelete, onDelete
         <button
           type="button"
           className={styles.deleteTabBtn}
-          onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete?.();
+          }}
           title="Delete tab"
         >
           ×
@@ -50,11 +55,12 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
   const [name, setName] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  // Fetch tasks for the tab being deleted to check if empty
+  // Fetch tasks only for the specific tab being deleted to check if empty
   const tabToDelete = tabs?.find((t) => t.id === confirmDeleteId);
-  const { data: tabTasks } = useTasks(
-    { tabId: confirmDeleteId ?? undefined },
-    `delete-check-${confirmDeleteId}`
+  const { data: tabTasks, isLoading: isCheckingTasks } = useTasks(
+    confirmDeleteId ? { tabId: confirmDeleteId } : {},
+    `delete-check-${confirmDeleteId ?? "none"}`,
+    { enabled: Boolean(confirmDeleteId) }
   );
 
   function submitNewTab() {
@@ -69,9 +75,8 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
 
   function confirmDelete() {
     if (!confirmDeleteId) return;
-    if (tabTasks && tabTasks.length > 0) {
+    if (isCheckingTasks || !tabTasks || tabTasks.length > 0) {
       alert("Move or delete all tasks from this tab before deleting it.");
-      setConfirmDeleteId(null);
       return;
     }
     deleteTab.mutate(confirmDeleteId);
@@ -90,7 +95,7 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
           active={view === tab.id}
           onClick={() => onChangeView(tab.id)}
           droppableId={`tab:${tab.id}`}
-          showDelete={!tab.isSystemDefault}
+          showDelete={tab.name !== "Projects"}
           onDelete={() => handleDeleteTab(tab.id)}
         />
       ))}
@@ -125,16 +130,18 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
         <div className={styles.confirmOverlay} onClick={() => setConfirmDeleteId(null)}>
           <div className={styles.confirmBox} onClick={(e) => e.stopPropagation()}>
             <p>Delete tab &quot;{tabToDelete?.name}&quot;?</p>
-            {tabTasks && tabTasks.length > 0 && (
+            {isCheckingTasks ? (
+              <p className={styles.confirmWarn}>Checking tasks…</p>
+            ) : tabTasks && tabTasks.length > 0 ? (
               <p className={styles.confirmWarn}>This tab has {tabTasks.length} task(s). Move or delete them first.</p>
-            )}
+            ) : null}
             <div className={styles.confirmActions}>
               <button type="button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>
               <button
                 type="button"
                 className={styles.confirmDeleteBtn}
                 onClick={confirmDelete}
-                disabled={!!(tabTasks && tabTasks.length > 0)}
+                disabled={isCheckingTasks || !tabTasks || tabTasks.length > 0}
               >
                 Delete
               </button>

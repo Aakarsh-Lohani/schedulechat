@@ -8,6 +8,7 @@ import styles from "./TaskModal.module.scss";
 interface Props {
   task?: TaskDTO | null;
   defaultTabId?: string;
+  defaultScheduledDate?: string;
   onClose: () => void;
 }
 
@@ -20,7 +21,7 @@ function toDatetimeLocalValue(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function TaskModal({ task, defaultTabId, onClose }: Props) {
+export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }: Props) {
   const { data: tabs } = useTabs();
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
@@ -30,7 +31,9 @@ export function TaskModal({ task, defaultTabId, onClose }: Props) {
   const [estimateMinutes, setEstimateMinutes] = useState(task?.estimateMinutes ?? 30);
   const [defaultTimerMinutes, setDefaultTimerMinutes] = useState(task?.defaultTimerMinutes ?? 30);
   const [description, setDescription] = useState(task?.description ?? "");
-  const [scheduledDate, setScheduledDate] = useState(toDatetimeLocalValue(task?.scheduledDate));
+  const [scheduledDate, setScheduledDate] = useState(
+    toDatetimeLocalValue(task?.scheduledDate ?? (task ? undefined : defaultScheduledDate))
+  );
 
   async function handleSave() {
     if (!title.trim() || !tabId) return;
@@ -62,7 +65,12 @@ export function TaskModal({ task, defaultTabId, onClose }: Props) {
 
   return (
     <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div
+        className={styles.modal}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <h3 className={styles.heading}>{task ? "Edit task" : "New task"}</h3>
 
         <label className={styles.field}>

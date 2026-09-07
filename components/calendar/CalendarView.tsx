@@ -52,7 +52,12 @@ function Bar({ task, position, onOpen }: { task: TaskDTO; position: { start: num
       type="button"
       className={`${styles.bar} ${styles[color]} ${task.source === "ai-suggested" ? styles.ai : ""}`}
       style={style}
-      onClick={() => !isDragging && onOpen(task)}
+      onClick={(e) => {
+        if (!isDragging) {
+          e.stopPropagation();
+          onOpen(task);
+        }
+      }}
       {...listeners}
       {...attributes}
     >
@@ -85,6 +90,9 @@ export function CalendarView() {
       if (!task) return;
 
       const { startDate, endDate } = shiftTaskDates(task, weekStart, dayIndex);
+      // Guard: Do not fire mutation if the dates did not change
+      if (task.startDate === startDate && task.endDate === endDate) return;
+
       updateTask.mutate({ id: taskId, startDate, endDate });
     },
   });
@@ -113,7 +121,14 @@ export function CalendarView() {
 
           {rows.map(({ task, position }) => (
             <div key={task.id} className={styles.row}>
-              <div className={styles.rowLabel}>{task.title}</div>
+              <div
+                className={styles.rowLabel}
+                style={{ cursor: "pointer" }}
+                onClick={() => setEditing(task)}
+                title="Click to edit task"
+              >
+                {task.title}
+              </div>
               <div className={styles.track}>
                 {days.map((_, i) => (
                   <DayCell key={i} taskId={task.id} dayIndex={i} />

@@ -24,16 +24,53 @@ function useNowTick(intervalMs = 1000) {
   return now;
 }
 
-function SlotView({ slot, session }: { slot: 1 | 2; session: TimerSlotDTO | null }) {
-  const now = useNowTick();
+function SlotView({
+  slot,
+  session,
+  now,
+}: {
+  slot: 1 | 2;
+  session: TimerSlotDTO | null;
+  now: number;
+}) {
   const confirmStart = useConfirmStartTimer();
   const cancelTimer = useCancelTimer();
   const extendTimer = useExtendTimer();
   const stopTimer = useStopTimer();
-  const { setNodeRef, isOver: isDropTarget } = useDroppable({ id: `timer:${slot}`, disabled: !!session });
+  const { setNodeRef, isOver: isDropTarget } = useDroppable({
+    id: `timer:${slot}`,
+    disabled: !!session,
+  });
 
   // Guard ref to ensure confirm-start fires exactly once per session
   const confirmedRef = useRef<string | null>(null);
+
+  const sessionId = session?.id ?? null;
+  const sessionStatus = session?.status ?? null;
+  const isCountdown = sessionStatus === "countdown";
+  const startedAtMs = session?.startedAt ? new Date(session.startedAt).getTime() : 0;
+  const endsAtMs = session?.countdownEndsAt
+    ? new Date(session.countdownEndsAt).getTime()
+    : startedAtMs + COUNTDOWN_SECONDS * 1000;
+
+  const remaining = isCountdown ? Math.max(0, Math.round((endsAtMs - now) / 1000)) : 0;
+
+  // Unconditional countdown expiration effect
+  useEffect(() => {
+    if (isCountdown && sessionId && remaining === 0 && confirmedRef.current !== sessionId) {
+      confirmedRef.current = sessionId;
+      confirmStart.mutate(sessionId);
+    }
+  }, [isCountdown, sessionId, remaining, confirmStart]);
+
+  // Reset confirmedRef when session is cleared or changes
+  useEffect(() => {
+    if (!sessionId || !isCountdown) {
+      if (confirmedRef.current && confirmedRef.current !== sessionId) {
+        confirmedRef.current = null;
+      }
+    }
+  }, [sessionId, isCountdown]);
 
   if (!session) {
     return (
@@ -43,23 +80,9 @@ function SlotView({ slot, session }: { slot: 1 | 2; session: TimerSlotDTO | null
     );
   }
 
-  const startedAtMs = new Date(session.startedAt).getTime();
-
   if (session.status === "countdown") {
-    const endsAtMs = session.countdownEndsAt ? new Date(session.countdownEndsAt).getTime() : startedAtMs + COUNTDOWN_SECONDS * 1000;
-    const remaining = Math.max(0, Math.round((endsAtMs - now) / 1000));
-
-    // Fire confirm-start exactly once when countdown reaches zero
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useEffect(() => {
-      if (remaining === 0 && confirmedRef.current !== session.id) {
-        confirmedRef.current = session.id;
-        confirmStart.mutate(session.id);
-      }
-    }, [remaining, session.id, confirmStart]);
-
     return (
-      <div className={styles.slot}>
+      <div ref={setNodeRef} className={styles.slot}>
         <div className={styles.ring} />
         <div className={styles.meta}>
           <span className={styles.label}>Timer {slot} · starting…</span>
@@ -77,17 +100,17 @@ function SlotView({ slot, session }: { slot: 1 | 2; session: TimerSlotDTO | null
 
   const workElapsedSeconds = Math.max(0, (now - startedAtMs) / 1000 - COUNTDOWN_SECONDS);
   const plannedTotal = session.plannedDurationSeconds + session.extendedBySeconds;
-  const remaining = plannedTotal - workElapsedSeconds;
-  const isOver = remaining <= 0;
+  const remainingRunning = plannedTotal - workElapsedSeconds;
+  const isOver = remainingRunning <= 0;
 
   return (
-    <div className={`${styles.slot} ${isOver ? styles.over : ""}`}>
+    <div ref={setNodeRef} className={`${styles.slot} ${isOver ? styles.over : ""}`}>
       <div className={styles.ring} />
       <div className={styles.meta}>
         <span className={styles.label}>Timer {slot}</span>
         <span className={styles.taskName}>{session.taskTitle}</span>
         <span className={styles.value}>
-          {isOver ? `+${formatClock(-remaining)} over` : `${formatClock(remaining)} remaining`}
+          {isOver ? `+${formatClock(-remainingRunning)} over` : `${formatClock(remainingRunning)} remaining`}
         </span>
       </div>
       <div className={styles.actions}>
@@ -136,8 +159,8 @@ export function TimerBar() {
         </button>
       </div>
       <div className={styles.timers}>
-        <SlotView slot={1} session={data?.slots["1"] ?? null} />
-        <SlotView slot={2} session={data?.slots["2"] ?? null} />
+        <SlotView slot={1} session={data?.slots["1"] ?? null} now={now} />
+        <SlotView slot={2} session={data?.slots["2"] ?? null} now={now} />
         <div className={styles.today}>
           <span className={styles.label}>Today total</span>
           <span className={styles.value}>{formatDuration(todayTotal)}</span>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { BudgetBar } from "./BudgetBar";
 import { useUpdateTask } from "@/lib/api/hooks";
@@ -12,6 +13,21 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
     data: { task },
   });
   const updateTask = useUpdateTask();
+
+  // Local state for buttery smooth 60fps slider adjustments
+  const [prevPercent, setPrevPercent] = useState(task.progressPercent);
+  const [progress, setProgress] = useState(task.progressPercent);
+
+  if (task.progressPercent !== prevPercent) {
+    setPrevPercent(task.progressPercent);
+    setProgress(task.progressPercent);
+  }
+
+  function commitProgress(val: number) {
+    if (val !== task.progressPercent) {
+      updateTask.mutate({ id: task.id, progressPercent: val });
+    }
+  }
 
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
@@ -31,11 +47,19 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
         <span className={styles.dragHandle} {...listeners} {...attributes} title="Drag to reorder">
           ⠿
         </span>
-        <span className={styles.title}>{task.title}</span>
+        <span
+          className={styles.title}
+          style={{ cursor: "pointer" }}
+          onClick={() => onOpen(task)}
+          title="Click to edit task"
+        >
+          {task.title}
+        </span>
         <button
           type="button"
           className={styles.editBtn}
           onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={() => onOpen(task)}
           title="Edit task"
         >
@@ -51,6 +75,7 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
           type="button"
           className={styles.acceptBtn}
           onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={() => updateTask.mutate({ id: task.id, aiAccepted: true })}
         >
           Accept suggestion
@@ -65,11 +90,16 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
           type="range"
           min={0}
           max={100}
-          value={task.progressPercent}
+          value={progress}
           onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => updateTask.mutate({ id: task.id, progressPercent: Number(e.target.value) })}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          onChange={(e) => setProgress(Number(e.target.value))}
+          onPointerUp={() => commitProgress(progress)}
+          onKeyUp={() => commitProgress(progress)}
         />
-        <span className={styles.progressPct}>{task.progressPercent}%</span>
+        <span className={styles.progressPct}>{progress}%</span>
       </div>
 
       <div className={styles.metaRow}>

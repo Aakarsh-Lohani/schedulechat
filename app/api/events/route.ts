@@ -1,27 +1,18 @@
-import mongoose, { Types } from "mongoose";
-type MongoDocument = mongoose.mongo.BSON.Document;
+import { Types } from "mongoose";
 import { getCurrentUserId } from "@/lib/session";
 import { connectDB } from "@/lib/db/connect";
 import { Task } from "@/lib/db/models/Task";
 import { Tab } from "@/lib/db/models/Tab";
 import { TimerSession } from "@/lib/db/models/TimerSession";
 import { AIAction } from "@/lib/db/models/AIAction";
+import { subscribe, type RealtimeEvent, type RealtimeEventType } from "@/lib/realtime/emitter";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-// Extends how long the host keeps this connection open before forcibly closing it
-// (Vercel serverless functions are killed after their max execution duration
-// regardless of what's happening inside them — this only requests the longest
-// duration your plan allows; Hobby plans cap this well below Pro/Enterprise).
-// See https://vercel.com/docs/functions/configuring-functions/duration
 export const maxDuration = 300;
 
-const KEEPALIVE_MS = 20000;
+const KEEPALIVE_MS = 15000;
 
-// Maps a MongoDB collection name to the realtime event type the client expects.
-// Built once at module load — collection names are available as soon as the
-// models are defined, no DB connection needed yet.
 const COLLECTION_TO_EVENT: Record<string, string> = {
   [Task.collection.name]: "task-updated",
   [Tab.collection.name]: "tabs-updated",
@@ -29,21 +20,7 @@ const COLLECTION_TO_EVENT: Record<string, string> = {
   [AIAction.collection.name]: "ai-action-executed",
 };
 
-/**
- * Real-time sync, backed by a MongoDB Change Stream opened for this exact
- * connection rather than an in-memory event emitter.
- *
- * WHY: on Vercel (and most serverless hosts), every API route is deployed as an
- * independent function instance with its own process memory. A write to
- * /api/tasks and a long-lived GET to /api/events are *never* the same process —
- * an in-memory pub/sub map shared via a Node `global` only works when everything
- * runs in one process, which is true in `next dev` (masking the problem locally)
- * but never true once deployed. Change Streams sidestep this entirely: each SSE
- * connection watches the actual database directly, which is real shared state
- * (Atlas), not process memory — so it works correctly regardless of which
- * function instance is running.
- */
-export async function GET() {
+export async function GET(req: Request) {
   const userId = await getCurrentUserId();
   if (!userId) {
     return new Response("Unauthorized", { status: 401 });
@@ -60,59 +37,106 @@ export async function GET() {
 
   let changeStream: ReturnType<typeof db.watch> | null = null;
   let keepAlive: ReturnType<typeof setInterval> | null = null;
+  let unsubscribeEmitter: (() => void) | null = null;
+  let isClosed = false;
 
   const stream = new ReadableStream({
     start(controller) {
-      changeStream = db.watch(
-        [
-          {
-            $match: {
-              "ns.coll": { $in: Object.keys(COLLECTION_TO_EVENT) },
-              "fullDocument.userId": userObjectId,
-            },
-          },
-        ],
-        { fullDocument: "updateLookup" }
-      );
-
-      changeStream!.on("change", (change) => {
-        const collName = "ns" in change && "coll" in change.ns ? change.ns.coll : undefined;
-        const eventType = (collName && COLLECTION_TO_EVENT[collName]) || "task-updated";
-        try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: eventType })}\n\n`));
-        } catch {
-          // controller already closed (client disconnected) — ignore
+      const cleanup = () => {
+        if (isClosed) return;
+        isClosed = true;
+        if (keepAlive) {
+          clearInterval(keepAlive);
+          keepAlive = null;
         }
-      });
-
-      changeStream!.on("error", () => {
-        // Let the client's own reconnect-with-backoff logic handle this.
+        if (unsubscribeEmitter) {
+          unsubscribeEmitter();
+          unsubscribeEmitter = null;
+        }
+        if (changeStream) {
+          changeStream.close().catch(() => {});
+          changeStream = null;
+        }
         try {
           controller.close();
         } catch {
           // already closed
         }
+      };
+
+      const sendEvent = (event: RealtimeEvent) => {
+        if (isClosed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } catch {
+          cleanup();
+        }
+      };
+
+      // 1. Subscribe to in-memory emitter (catches deletes, fast in-process writes, and standalone Mongo fallback)
+      unsubscribeEmitter = subscribe(userId, (event) => {
+        sendEvent(event);
       });
 
+      // 2. Open MongoDB ChangeStream if replica set supports it
+      try {
+        changeStream = db.watch(
+          [
+            {
+              $match: {
+                "ns.coll": { $in: Object.keys(COLLECTION_TO_EVENT) },
+                $or: [
+                  { "fullDocument.userId": userObjectId },
+                  { operationType: "delete" },
+                ],
+              },
+            },
+          ],
+          { fullDocument: "updateLookup" }
+        );
+
+        changeStream.on("change", (change) => {
+          const collName = "ns" in change && "coll" in change.ns ? change.ns.coll : undefined;
+          const eventType = (collName && COLLECTION_TO_EVENT[collName]) || "task-updated";
+          sendEvent({ type: eventType as RealtimeEventType });
+        });
+
+        changeStream.on("error", () => {
+          if (changeStream) {
+            changeStream.close().catch(() => {});
+            changeStream = null;
+          }
+        });
+      } catch {
+        // Standalone Mongo environment: ChangeStreams unavailable, fallback to emitter continues
+      }
+
+      // 3. Keep-alive comments
       keepAlive = setInterval(() => {
+        if (isClosed) return;
         try {
           controller.enqueue(encoder.encode(`: keep-alive\n\n`));
         } catch {
-          // already closed
+          cleanup();
         }
       }, KEEPALIVE_MS);
+
+      // 4. Abort signal listener for client disconnects
+      req.signal.addEventListener("abort", cleanup);
     },
     cancel() {
-      changeStream?.close().catch(() => {});
       if (keepAlive) clearInterval(keepAlive);
+      if (unsubscribeEmitter) unsubscribeEmitter();
+      changeStream?.close().catch(() => {});
     },
   });
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform, no-store, must-revalidate",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }

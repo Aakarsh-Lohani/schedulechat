@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   const count = await Tab.countDocuments({ userId });
   const tab = await Tab.create({ userId, name: parsed.data.name, order: count, isSystemDefault: false });
 
-  emit(userId, { type: "task-updated" });
+  emit(userId, { type: "tabs-updated" });
 
   return NextResponse.json({ tab: { id: String(tab._id), name: tab.name, order: tab.order } }, { status: 201 });
 }
