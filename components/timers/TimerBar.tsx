@@ -1,7 +1,8 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { signOut } from "next-auth/react";
 import {
   useActiveTimers,
   useCancelTimer,
@@ -31,6 +32,9 @@ function SlotView({ slot, session }: { slot: 1 | 2; session: TimerSlotDTO | null
   const stopTimer = useStopTimer();
   const { setNodeRef, isOver: isDropTarget } = useDroppable({ id: `timer:${slot}`, disabled: !!session });
 
+  // Guard ref to ensure confirm-start fires exactly once per session
+  const confirmedRef = useRef<string | null>(null);
+
   if (!session) {
     return (
       <div ref={setNodeRef} className={`${styles.slot} ${isDropTarget ? styles.dropTarget : ""}`}>
@@ -44,7 +48,16 @@ function SlotView({ slot, session }: { slot: 1 | 2; session: TimerSlotDTO | null
   if (session.status === "countdown") {
     const endsAtMs = session.countdownEndsAt ? new Date(session.countdownEndsAt).getTime() : startedAtMs + COUNTDOWN_SECONDS * 1000;
     const remaining = Math.max(0, Math.round((endsAtMs - now) / 1000));
-    if (remaining === 0) confirmStart.mutate(session.id);
+
+    // Fire confirm-start exactly once when countdown reaches zero
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useEffect(() => {
+      if (remaining === 0 && confirmedRef.current !== session.id) {
+        confirmedRef.current = session.id;
+        confirmStart.mutate(session.id);
+      }
+    }, [remaining, session.id, confirmStart]);
+
     return (
       <div className={styles.slot}>
         <div className={styles.ring} />
@@ -109,8 +122,18 @@ export function TimerBar() {
 
   return (
     <div className={styles.topbar}>
-      <div className={styles.brand}>
-        Schedule<span>Chat</span>
+      <div className={styles.brandRow}>
+        <div className={styles.brand}>
+          Schedule<span>Chat</span>
+        </div>
+        <button
+          type="button"
+          className={styles.signOutBtn}
+          onClick={() => signOut({ callbackUrl: "/login" })}
+          title="Sign out"
+        >
+          Sign out
+        </button>
       </div>
       <div className={styles.timers}>
         <SlotView slot={1} session={data?.slots["1"] ?? null} />

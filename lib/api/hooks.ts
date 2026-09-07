@@ -21,6 +21,17 @@ export function useCreateTab() {
   });
 }
 
+export function useDeleteTab() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch("/api/tabs/" + id, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tabs"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}
+
 // ---- Tasks ----
 
 interface TaskFilter {
