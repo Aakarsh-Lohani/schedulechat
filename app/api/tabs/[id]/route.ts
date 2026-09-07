@@ -22,7 +22,7 @@ export async function PATCH(req: Request, { params: paramsPromise }: { params: P
   const tab = await Tab.findOneAndUpdate({ _id: params.id, userId }, { $set: parsed.data }, { new: true }).lean();
   if (!tab) return NextResponse.json({ error: "Not found", code: "NOT_FOUND" }, { status: 404 });
 
-  emit(userId, { type: "task-updated" });
+  emit(userId, { type: "tabs-updated" });
 
   return NextResponse.json({ tab: { id: String(tab._id), name: tab.name } });
 }
@@ -43,14 +43,42 @@ export async function DELETE(req: Request, { params: paramsPromise }: { params: 
   const tab = await Tab.findOne({ _id: params.id, userId });
   if (!tab) return NextResponse.json({ error: "Not found", code: "NOT_FOUND" }, { status: 404 });
 
-  if (moveToTabId) {
+  // 1. Guard primary tab ("Projects" or system default)
+  if (tab.name === "Projects" || tab.isSystemDefault) {
+    return NextResponse.json(
+      { error: "The primary tab cannot be deleted.", code: "PRIMARY_TAB_PROTECTED" },
+      { status: 400 }
+    );
+  }
+
+  // 2. Emptiness check: if not moving tasks, verify no active tasks exist in tab
+  if (!moveToTabId) {
+    const activeTaskCount = await Task.countDocuments({
+      userId,
+      tabId: params.id,
+      status: { $ne: "archived" },
+    });
+    if (activeTaskCount > 0) {
+      return NextResponse.json(
+        {
+          error: `Cannot delete tab with ${activeTaskCount} active task(s). Move or delete tasks first.`,
+          code: "TAB_NOT_EMPTY",
+          activeTaskCount,
+        },
+        { status: 400 }
+      );
+    }
+  } else {
     await Task.updateMany({ userId, tabId: params.id }, { $set: { tabId: moveToTabId } });
   }
 
   tab.status = "archived";
   await tab.save();
 
-  emit(userId, { type: "task-updated" });
+  emit(userId, { type: "tabs-updated" });
+  if (moveToTabId) {
+    emit(userId, { type: "task-updated" });
+  }
 
   return NextResponse.json({ ok: true });
 }

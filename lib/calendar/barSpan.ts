@@ -55,9 +55,11 @@ export function shiftTaskDates(
   origStart.setHours(0, 0, 0, 0);
   origEnd.setHours(0, 0, 0, 0);
 
-  const durationDays = Math.round((origEnd.getTime() - origStart.getTime()) / DAY_MS);
-  const newStart = new Date(weekStart.getTime() + targetDayIndex * DAY_MS);
-  const newEnd = new Date(newStart.getTime() + durationDays * DAY_MS);
+  const durationDays = Math.max(0, Math.round((origEnd.getTime() - origStart.getTime()) / DAY_MS));
+  const durationMs = durationDays * DAY_MS;
+  const newStartMs = weekStart.getTime() + targetDayIndex * DAY_MS;
+  const newStart = new Date(newStartMs);
+  const newEnd = new Date(newStartMs + durationMs);
 
   return { startDate: newStart.toISOString(), endDate: newEnd.toISOString() };
 }

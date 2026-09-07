@@ -81,6 +81,7 @@ export function TaskColumn({ view }: { view: BoardView }) {
         <TaskModal
           task={editing}
           defaultTabId={isToday ? tabs?.[0]?.id : view}
+          defaultScheduledDate={isToday ? new Date().toISOString() : undefined}
           onClose={() => {
             setCreating(false);
             setEditing(null);

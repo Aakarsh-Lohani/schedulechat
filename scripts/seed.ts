@@ -7,7 +7,12 @@ import { User } from "../lib/db/models/User";
 import { Tab } from "../lib/db/models/Tab";
 import { Task } from "../lib/db/models/Task";
 
-const DEFAULT_TABS = ["Projects", "DSA", "System Design", "Project Progress"];
+const DEFAULT_TABS = [
+  { name: "Projects", isSystemDefault: true },
+  { name: "DSA", isSystemDefault: false },
+  { name: "System Design", isSystemDefault: false },
+  { name: "Project Progress", isSystemDefault: false },
+];
 
 async function main() {
   const email = process.env.APP_USER_EMAIL;
@@ -30,10 +35,10 @@ async function main() {
   const existingTabs = await Tab.find({ userId: user._id });
   if (existingTabs.length === 0) {
     const tabs = await Tab.insertMany(
-      DEFAULT_TABS.map((name, i) => ({
+      DEFAULT_TABS.map((t, i) => ({
         userId: user!._id,
-        name,
-        isSystemDefault: true,
+        name: t.name,
+        isSystemDefault: t.isSystemDefault,
         order: i,
         status: "active",
       }))

@@ -27,10 +27,31 @@ export async function GET(req: Request) {
   const query: Record<string, unknown> = { userId, status: { $ne: "archived" } };
   if (tabId) query.tabId = tabId;
   if (scheduledToday) {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const endOfToday = new Date(startOfToday);
-    endOfToday.setHours(23, 59, 59, 999);
+    const tzOffsetParam = url.searchParams.get("tzOffset");
+    let startOfToday: Date;
+    let endOfToday: Date;
+
+    if (tzOffsetParam !== null && !isNaN(Number(tzOffsetParam))) {
+      const tzOffsetMinutes = Number(tzOffsetParam);
+      // Determine current instant in client's local day
+      const nowUtcMs = Date.now();
+      const clientLocalTimeMs = nowUtcMs - tzOffsetMinutes * 60 * 1000;
+      const clientDate = new Date(clientLocalTimeMs);
+
+      const year = clientDate.getUTCFullYear();
+      const month = clientDate.getUTCMonth();
+      const day = clientDate.getUTCDate();
+
+      // Reconstruct start and end of client day in UTC
+      startOfToday = new Date(Date.UTC(year, month, day) + tzOffsetMinutes * 60 * 1000);
+      endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000 - 1);
+    } else {
+      startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      endOfToday = new Date(startOfToday);
+      endOfToday.setHours(23, 59, 59, 999);
+    }
+
     query.$or = [
       { scheduledDate: { $gte: startOfToday, $lte: endOfToday } },
       { startDate: { $lte: endOfToday }, endDate: { $gte: startOfToday } },

@@ -3,11 +3,11 @@ import { z } from "zod";
 export const objectIdString = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid id");
 
 export const createTabSchema = z.object({
-  name: z.string().min(1).max(60),
+  name: z.string().trim().min(1).max(60),
 });
 
 export const updateTabSchema = z.object({
-  name: z.string().min(1).max(60).optional(),
+  name: z.string().trim().min(1).max(60).optional(),
   order: z.number().optional(),
   status: z.enum(["active", "archived"]).optional(),
 });

@@ -37,8 +37,20 @@ export function ChatPanel() {
     if (!text || sendChat.isPending) return;
     setInput("");
     setNewMessages((m) => [...m, { role: "user", content: text }]);
-    const result = await sendChat.mutateAsync({ message: text, mode: chatMode });
-    setNewMessages((m) => [...m, { role: "assistant", content: result.reply }]);
+    try {
+      const result = await sendChat.mutateAsync({ message: text, mode: chatMode });
+      setNewMessages((m) => [...m, { role: "assistant", content: result.reply }]);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to communicate with Copilot";
+      setInput(text);
+      setNewMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content: `⚠️ Copilot request failed: ${errorMsg}. Your prompt has been restored. Please check your connection or AI provider key and try again.`,
+        },
+      ]);
+    }
   }
 
   const proposed = (actions ?? []).filter((a) => a.status === "proposed");

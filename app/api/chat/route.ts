@@ -43,32 +43,47 @@ export async function POST(req: Request) {
 
   logger.info({ userId, mode, provider: process.env.AI_PROVIDER ?? "anthropic" }, "chat turn started");
 
-  const result = await runChatTurn({
-    userId,
-    mode,
-    systemPrompt,
-    history: historyDocs.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
-  });
+  try {
+    const result = await Promise.race([
+      runChatTurn({
+        userId,
+        mode,
+        systemPrompt,
+        history: historyDocs.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("AI response timed out after 35 seconds")), 35000)
+      ),
+    ]);
 
-  const assistantMessage = await ChatMessage.create({
-    userId,
-    role: "assistant",
-    content: result.replyText,
-    mode,
-    relatedActionIds: result.createdActionIds,
-  });
+    const assistantMessage = await ChatMessage.create({
+      userId,
+      role: "assistant",
+      content: result.replyText,
+      mode,
+      relatedActionIds: result.createdActionIds,
+    });
 
-  const proposals = result.createdActionIds.length
-    ? await AIAction.find({ _id: { $in: result.createdActionIds } }).lean()
-    : [];
+    const proposals = result.createdActionIds.length
+      ? await AIAction.find({ _id: { $in: result.createdActionIds } }).lean()
+      : [];
 
-  return NextResponse.json({
-    reply: assistantMessage.content,
-    proposals: proposals.map((p) => ({
-      id: String(p._id),
-      type: p.type,
-      summary: p.summary,
-      status: p.status,
-    })),
-  });
+    return NextResponse.json({
+      reply: assistantMessage.content,
+      proposals: proposals.map((p) => ({
+        id: String(p._id),
+        type: p.type,
+        summary: p.summary,
+        status: p.status,
+      })),
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : "AI turn failed";
+    logger.error({ err, userId }, "chat turn failed");
+
+    return NextResponse.json(
+      { error: `Copilot error: ${errorMsg}`, code: "AI_TURN_FAILED" },
+      { status: 500 }
+    );
+  }
 }

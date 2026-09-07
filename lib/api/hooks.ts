@@ -28,6 +28,7 @@ export function useDeleteTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tabs"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
     },
   });
 }
@@ -39,21 +40,30 @@ interface TaskFilter {
   scheduledToday?: boolean;
   from?: string;
   to?: string;
+  tzOffset?: number;
 }
 
 function taskQueryString(filter: TaskFilter): string {
   const params = new URLSearchParams();
   if (filter.tabId) params.set("tabId", filter.tabId);
-  if (filter.scheduledToday) params.set("scheduledToday", "true");
+  if (filter.scheduledToday) {
+    params.set("scheduledToday", "true");
+    params.set("tzOffset", String(filter.tzOffset ?? new Date().getTimezoneOffset()));
+  }
   if (filter.from) params.set("from", filter.from);
   if (filter.to) params.set("to", filter.to);
   return params.toString();
 }
 
-export function useTasks(filter: TaskFilter, queryKeySuffix: string) {
+export function useTasks(
+  filter: TaskFilter,
+  queryKeySuffix: string,
+  options?: { enabled?: boolean }
+) {
   return useQuery({
     queryKey: ["tasks", queryKeySuffix],
     queryFn: () => apiFetch<{ tasks: TaskDTO[] }>(`/api/tasks?${taskQueryString(filter)}`).then((r) => r.tasks),
+    enabled: options?.enabled,
   });
 }
 
@@ -81,6 +91,17 @@ export function useUpdateTask() {
   return useMutation({
     mutationFn: ({ id, ...fields }: { id: string } & Partial<TaskDTO>) =>
       apiFetch<{ task: TaskDTO }>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(fields) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+    },
+  });
+}
+
+export function useDeleteTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/tasks/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
@@ -139,6 +160,7 @@ export function useStopTimer() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["timers", "active"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
     },
   });
 }
@@ -181,6 +203,7 @@ export function useUndoAction() {
       qc.invalidateQueries({ queryKey: ["ai-actions"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+      qc.invalidateQueries({ queryKey: ["tabs"] });
     },
   });
 }

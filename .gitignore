@@ -5,4 +5,5 @@ log
 .env*.local
 *.tsbuildinfo
 npm-debug.log*
+tests/
 
