@@ -8,7 +8,7 @@ const MAX_TOOL_ITERATIONS = 6;
 
 // Update this if Google ships a newer default model — check
 // https://ai.google.dev/gemini-api/docs/models for the current list.
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.8-flash";
 
 let client: GoogleGenerativeAI | null = null;
 function getClient(): GoogleGenerativeAI {
