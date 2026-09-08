@@ -1,5 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
 import { config } from "dotenv";
-config({ path: ".env.local" });
+
+const externalEnv = path.resolve(process.cwd(), "..", "secrets", ".env.local");
+config({ path: fs.existsSync(externalEnv) ? externalEnv : ".env.local" });
 
 import bcrypt from "bcryptjs";
 import { connectDB } from "../lib/db/connect";
