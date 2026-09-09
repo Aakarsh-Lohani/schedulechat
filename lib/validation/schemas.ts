@@ -51,4 +51,5 @@ export const extendTimerSchema = z.object({
 export const chatRequestSchema = z.object({
   message: z.string().min(1).max(4000),
   mode: z.enum(["suggest", "update"]),
+  model: z.string().optional(),
 });

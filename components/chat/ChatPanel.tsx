@@ -18,11 +18,20 @@ interface LocalMessage {
   content: string;
 }
 
+const GEMINI_MODELS = [
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Flagship)" },
+  { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
+  { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
+  { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
+  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
+];
+
 export function ChatPanel() {
   const { chatMode, setChatMode } = useUIStore();
   const { data: history } = useChatHistory();
   const [newMessages, setNewMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
+  const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
   const sendChat = useSendChat();
   const { data: actions } = useAiActions();
   const approveAction = useApproveAction();
@@ -39,7 +48,11 @@ export function ChatPanel() {
     setInput("");
     setNewMessages((m) => [...m, { role: "user", content: text }]);
     try {
-      const result = await sendChat.mutateAsync({ message: text, mode: chatMode });
+      const result = await sendChat.mutateAsync({
+        message: text,
+        mode: chatMode,
+        model: selectedModel,
+      });
       setNewMessages((m) => [...m, { role: "assistant", content: result.reply }]);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Failed to communicate with Copilot";
@@ -60,7 +73,21 @@ export function ChatPanel() {
   return (
     <div className={styles.chat}>
       <div className={styles.head}>
-        <div className={styles.title}>Copilot</div>
+        <div className={styles.titleRow}>
+          <div className={styles.title}>Copilot</div>
+          <select
+            className={styles.modelSelect}
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            title="Select Gemini Model"
+          >
+            {GEMINI_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className={styles.modeToggle}>
           <button
             type="button"

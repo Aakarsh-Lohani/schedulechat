@@ -221,7 +221,7 @@ export function useChatHistory() {
 export function useSendChat() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { message: string; mode: "suggest" | "update" }) =>
+    mutationFn: (input: { message: string; mode: "suggest" | "update"; model?: string }) =>
       apiFetch<ChatReplyDTO>("/api/chat", { method: "POST", body: JSON.stringify(input) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-actions"] }),
   });
