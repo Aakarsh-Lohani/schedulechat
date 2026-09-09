@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Sparkles, AlertTriangle } from "lucide-react";
 import { useUIStore } from "@/lib/store/uiStore";
 import {
   useAiActions,
@@ -47,7 +48,7 @@ export function ChatPanel() {
         ...m,
         {
           role: "assistant",
-          content: `⚠️ Copilot request failed: ${errorMsg}. Your prompt has been restored. Please check your connection or AI provider key and try again.`,
+          content: `Copilot request failed: ${errorMsg}. Your prompt has been restored. Please check your connection or AI provider key and try again.`,
         },
       ]);
     }
@@ -88,7 +89,10 @@ export function ChatPanel() {
 
         {proposed.map((action) => (
           <div key={action.id} className={styles.approvalCard}>
-            <div className={styles.approvalHead}>✦ Proposed change</div>
+            <div className={styles.approvalHead}>
+              <Sparkles size={13} />
+              Proposed change
+            </div>
             <div className={styles.approvalSummary}>{action.summary}</div>
             <div className={styles.approvalActions}>
               <button

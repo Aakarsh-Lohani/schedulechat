@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
+import { Pencil, Calendar, GripVertical } from "lucide-react";
 import { BudgetBar } from "./BudgetBar";
 import { useUpdateTask } from "@/lib/api/hooks";
 import type { TaskDTO } from "@/lib/api/types";
@@ -45,7 +46,7 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
     >
       <div className={styles.top}>
         <span className={styles.dragHandle} {...listeners} {...attributes} title="Drag to reorder">
-          ⠿
+          <GripVertical size={14} />
         </span>
         <span
           className={styles.title}
@@ -63,7 +64,7 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
           onClick={() => onOpen(task)}
           title="Edit task"
         >
-          ✏️
+          <Pencil size={12} />
         </button>
         <span className={`${styles.tag} ${task.source === "ai-suggested" ? styles.tagAi : ""}`}>
           {task.source === "ai-suggested" && !task.aiAccepted ? "AI suggested" : task.status}
@@ -104,7 +105,12 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
 
       <div className={styles.metaRow}>
         <span>timer: {task.defaultTimerMinutes}m</span>
-        {scheduledLabel && <span>📅 {scheduledLabel}</span>}
+        {scheduledLabel && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <Calendar size={12} />
+            {scheduledLabel}
+          </span>
+        )}
         <span>{task.status}</span>
       </div>
     </div>
