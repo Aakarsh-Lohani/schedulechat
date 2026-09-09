@@ -28,3 +28,31 @@ export async function connectDB(): Promise<typeof mongoose> {
   globalCache.conn = await globalCache.promise;
   return globalCache.conn;
 }
+
+export class ReadOnlyDbNotConfiguredError extends Error {
+  constructor() {
+    super(
+      "Read-only database setup is not complete (MONGODB_READONLY_URI is not configured). Please configure MONGODB_READONLY_URI in your environment or switch to Update mode."
+    );
+    this.name = "ReadOnlyDbNotConfiguredError";
+  }
+}
+
+let readOnlyConn: mongoose.Connection | null = null;
+let readOnlyPromise: Promise<mongoose.Connection> | null = null;
+
+export async function connectReadOnlyDB(): Promise<mongoose.Connection> {
+  const { MONGODB_READONLY_URI } = getEnv();
+  if (!MONGODB_READONLY_URI) {
+    throw new ReadOnlyDbNotConfiguredError();
+  }
+
+  if (readOnlyConn) return readOnlyConn;
+  if (!readOnlyPromise) {
+    readOnlyPromise = mongoose.createConnection(MONGODB_READONLY_URI, {
+      bufferCommands: false,
+    }).asPromise();
+  }
+  readOnlyConn = await readOnlyPromise;
+  return readOnlyConn;
+}

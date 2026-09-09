@@ -31,6 +31,15 @@ export async function POST(req: Request) {
   }
   const { message, mode, model } = parsed.data;
 
+  // Strict Suggest Mode isolation: if MONGODB_READONLY_URI is not configured, do not fall back to main env!
+  if (mode === "suggest" && !process.env.MONGODB_READONLY_URI) {
+    return NextResponse.json({
+      reply:
+        "Read-only database setup is not complete (MONGODB_READONLY_URI is not configured). Please configure MONGODB_READONLY_URI in your environment or switch to Update mode.",
+      proposals: [],
+    });
+  }
+
   await connectDB();
 
   await ChatMessage.create({ userId, role: "user", content: message, mode });
