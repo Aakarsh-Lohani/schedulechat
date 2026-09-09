@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type BoardView = "today" | "scheduled" | "calendar" | string; // string = a tabId
+export type BoardView = "dashboard" | "today" | "scheduled" | "calendar" | string; // string = a tabId
 
 interface UIState {
   view: BoardView;
@@ -14,7 +14,7 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  view: "today",
+  view: "dashboard",
   setView: (view) => set({ view }),
 
   chatMode: "update",
