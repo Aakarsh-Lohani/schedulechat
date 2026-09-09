@@ -25,10 +25,34 @@
   gap: 10px;
 }
 
+.titleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
 .title {
   font-family: t.$font-display;
   font-size: 15px;
   font-weight: 500;
+}
+
+.modelSelect {
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-muted;
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 3px 6px;
+  cursor: pointer;
+  outline: none;
+  max-width: 170px;
+
+  &:hover, &:focus {
+    color: t.$text-primary;
+    border-color: rgba(255, 255, 255, 0.2);
+  }
 }
 
 .modeToggle {

@@ -31,6 +31,9 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
   const [estimateMinutes, setEstimateMinutes] = useState(task?.estimateMinutes ?? 30);
   const [defaultTimerMinutes, setDefaultTimerMinutes] = useState(task?.defaultTimerMinutes ?? 30);
   const [description, setDescription] = useState(task?.description ?? "");
+  const [status, setStatus] = useState<"not-started" | "in-progress" | "done" | "archived">(
+    task?.status ?? "not-started"
+  );
   const [scheduledDate, setScheduledDate] = useState(
     toDatetimeLocalValue(task?.scheduledDate ?? (task ? undefined : defaultScheduledDate))
   );
@@ -45,6 +48,7 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
         id: task.id,
         title,
         tabId,
+        status,
         estimateMinutes,
         defaultTimerMinutes,
         description,
@@ -54,6 +58,7 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
       await createTask.mutateAsync({
         title,
         tabId,
+        status,
         estimateMinutes,
         defaultTimerMinutes,
         description,
@@ -86,6 +91,19 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
                 {t.name}
               </option>
             ))}
+          </select>
+        </label>
+
+        <label className={styles.field}>
+          State
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as "not-started" | "in-progress" | "done" | "archived")}
+          >
+            <option value="not-started">Upcoming / To Do</option>
+            <option value="in-progress">Active</option>
+            <option value="done">Completed</option>
+            <option value="archived">Archived</option>
           </select>
         </label>
 

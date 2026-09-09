@@ -37,6 +37,7 @@ export interface TimerSlotDTO {
 export interface ActiveTimersDTO {
   slots: Record<"1" | "2", TimerSlotDTO | null>;
   completedSecondsTodayBase: number;
+  totalUsageSeconds: number;
 }
 
 export interface AIActionDTO {
@@ -53,3 +54,20 @@ export interface ChatReplyDTO {
   reply: string;
   proposals: { id: string; type: string; summary: string; status: string }[];
 }
+
+export interface ScheduledTaskDTO {
+  id: string;
+  title: string;
+  description: string;
+  startTime: string;
+  durationMinutes: number;
+  timezone: string;
+  recurrenceRule: string;
+  recurrenceLabel: string;
+  reminderMinutes: number;
+  enabled: boolean;
+  syncToGoogleCalendar: boolean;
+  googleEventId: string | null;
+  createdAt: string;
+}
+

@@ -131,17 +131,38 @@ export function TimerBar() {
   const { data } = useActiveTimers();
   const now = useNowTick();
 
-  let liveSeconds = 0;
+  let liveSecondsToday = 0;
+  let liveSecondsTotal = 0;
+  const todayMidnightMs = new Date().setHours(0, 0, 0, 0);
+
   if (data) {
     for (const key of ["1", "2"] as const) {
       const s = data.slots[key];
       if (s && s.status === "running") {
         const startedAtMs = new Date(s.startedAt).getTime();
-        liveSeconds += Math.max(0, (now - startedAtMs) / 1000 - COUNTDOWN_SECONDS);
+        const maxDurationSeconds = s.plannedDurationSeconds + s.extendedBySeconds;
+
+        // Total live elapsed across whole session, capped by planned duration + extensions
+        const totalElapsed = Math.min(
+          maxDurationSeconds,
+          Math.max(0, (now - startedAtMs) / 1000 - COUNTDOWN_SECONDS)
+        );
+        liveSecondsTotal += totalElapsed;
+
+        // Compute overlap of timer's work window with today
+        const workStartMs = startedAtMs + COUNTDOWN_SECONDS * 1000;
+        const expectedEndMs = workStartMs + maxDurationSeconds * 1000;
+        const actualEndMs = Math.min(now, expectedEndMs);
+        const overlapStartMs = Math.max(workStartMs, todayMidnightMs);
+        const overlapMs = Math.max(0, actualEndMs - overlapStartMs);
+        liveSecondsToday += overlapMs / 1000;
       }
     }
   }
-  const todayTotal = (data?.completedSecondsTodayBase ?? 0) + liveSeconds;
+
+  // Today's total is strictly capped between 0 and 24 hours (86,400s)
+  const todayTotal = Math.min(86400, Math.max(0, (data?.completedSecondsTodayBase ?? 0) + liveSecondsToday));
+  const allTimeTotal = Math.max(0, (data?.totalUsageSeconds ?? 0) + liveSecondsTotal);
 
   return (
     <div className={styles.topbar}>
@@ -164,6 +185,10 @@ export function TimerBar() {
         <div className={styles.today}>
           <span className={styles.label}>Today total</span>
           <span className={styles.value}>{formatDuration(todayTotal)}</span>
+        </div>
+        <div className={styles.today}>
+          <span className={styles.label}>All-time usage</span>
+          <span className={styles.value}>{formatDuration(allTimeTotal)}</span>
         </div>
       </div>
     </div>

@@ -29,7 +29,16 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request", code: "VALIDATION_ERROR" }, { status: 400 });
   }
-  const { message, mode } = parsed.data;
+  const { message, mode, model } = parsed.data;
+
+  // Strict Suggest Mode isolation: if MONGODB_READONLY_URI is not configured, do not fall back to main env!
+  if (mode === "suggest" && !process.env.MONGODB_READONLY_URI) {
+    return NextResponse.json({
+      reply:
+        "Read-only database setup is not complete (MONGODB_READONLY_URI is not configured). Please configure MONGODB_READONLY_URI in your environment or switch to Update mode.",
+      proposals: [],
+    });
+  }
 
   await connectDB();
 
@@ -41,7 +50,7 @@ export async function POST(req: Request) {
   const contextSnapshot = await buildContextSnapshot(userId);
   const systemPrompt = `${buildSystemPrompt(mode)}\n\n${contextSnapshot}`;
 
-  logger.info({ userId, mode, provider: process.env.AI_PROVIDER ?? "anthropic" }, "chat turn started");
+  logger.info({ userId, mode, model, provider: process.env.AI_PROVIDER ?? "anthropic" }, "chat turn started");
 
   try {
     const result = await Promise.race([
@@ -50,6 +59,7 @@ export async function POST(req: Request) {
         mode,
         systemPrompt,
         history: historyDocs.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
+        model,
       }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("AI response timed out after 35 seconds")), 35000)

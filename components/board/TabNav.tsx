@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
+import { X, Plus, Calendar, CalendarClock } from "lucide-react";
 import { useCreateTab, useDeleteTab, useTabs, useTasks } from "@/lib/api/hooks";
 import { useUIStore } from "@/lib/store/uiStore";
 import type { BoardView } from "@/lib/store/uiStore";
@@ -9,7 +10,7 @@ import styles from "./TabNav.module.scss";
 
 function NavItem({ id, label, active, onClick, droppableId, showDelete, onDelete }: {
   id: string;
-  label: string;
+  label: React.ReactNode;
   active: boolean;
   onClick: () => void;
   droppableId?: string;
@@ -39,7 +40,7 @@ function NavItem({ id, label, active, onClick, droppableId, showDelete, onDelete
           }}
           title="Delete tab"
         >
-          ×
+          <X size={12} />
         </button>
       )}
     </div>
@@ -99,7 +100,28 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
           onDelete={() => handleDeleteTab(tab.id)}
         />
       ))}
-      <NavItem id="calendar" label="🗓 Calendar" active={view === "calendar"} onClick={() => onChangeView("calendar")} />
+      <NavItem
+        id="calendar"
+        label={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <Calendar size={13} />
+            Calendar
+          </span>
+        }
+        active={view === "calendar"}
+        onClick={() => onChangeView("calendar")}
+      />
+      <NavItem
+        id="scheduled"
+        label={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <CalendarClock size={13} />
+            Scheduled Tasks
+          </span>
+        }
+        active={view === "scheduled"}
+        onClick={() => onChangeView("scheduled")}
+      />
 
       {adding ? (
         <input
@@ -113,7 +135,7 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
         />
       ) : (
         <button type="button" className={styles.addBtn} title="Add tab" onClick={() => setAdding(true)}>
-          +
+          <Plus size={14} />
         </button>
       )}
 

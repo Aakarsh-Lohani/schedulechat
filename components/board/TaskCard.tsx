@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
+import { Pencil, Calendar, GripVertical, Play, Check, RotateCcw } from "lucide-react";
 import { BudgetBar } from "./BudgetBar";
 import { useUpdateTask } from "@/lib/api/hooks";
 import type { TaskDTO } from "@/lib/api/types";
@@ -45,7 +46,7 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
     >
       <div className={styles.top}>
         <span className={styles.dragHandle} {...listeners} {...attributes} title="Drag to reorder">
-          ⠿
+          <GripVertical size={14} />
         </span>
         <span
           className={styles.title}
@@ -63,7 +64,7 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
           onClick={() => onOpen(task)}
           title="Edit task"
         >
-          ✏️
+          <Pencil size={12} />
         </button>
         <span className={`${styles.tag} ${task.source === "ai-suggested" ? styles.tagAi : ""}`}>
           {task.source === "ai-suggested" && !task.aiAccepted ? "AI suggested" : task.status}
@@ -104,8 +105,49 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
 
       <div className={styles.metaRow}>
         <span>timer: {task.defaultTimerMinutes}m</span>
-        {scheduledLabel && <span>📅 {scheduledLabel}</span>}
-        <span>{task.status}</span>
+        {scheduledLabel && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <Calendar size={12} />
+            {scheduledLabel}
+          </span>
+        )}
+        {task.status === "not-started" && (
+          <button
+            type="button"
+            className={styles.stateBtn}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => updateTask.mutate({ id: task.id, status: "in-progress" })}
+            title="Mark as Active"
+          >
+            <Play size={10} /> Start
+          </button>
+        )}
+        {task.status === "in-progress" && (
+          <button
+            type="button"
+            className={styles.stateBtn}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => updateTask.mutate({ id: task.id, status: "done", progressPercent: 100 })}
+            title="Mark as Completed"
+          >
+            <Check size={10} /> Done
+          </button>
+        )}
+        {task.status === "done" && (
+          <button
+            type="button"
+            className={styles.stateBtn}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => updateTask.mutate({ id: task.id, status: "not-started" })}
+            title="Reopen task"
+          >
+            <RotateCcw size={10} /> Reopen
+          </button>
+        )}
+        {task.status === "archived" && <span>archived</span>}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ import { TimerBar } from "@/components/timers/TimerBar";
 import { TabNav } from "@/components/board/TabNav";
 import { TaskColumn } from "@/components/board/TaskColumn";
 import { CalendarView } from "@/components/calendar/CalendarView";
+import { ScheduledTasksView } from "@/components/scheduled/ScheduledTasksView";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import styles from "./AppShell.module.scss";
 
@@ -69,7 +70,13 @@ export function AppShell() {
         <TimerBar />
         <TabNav view={view} onChangeView={setView} />
         <div className={styles.main}>
-          {view === "calendar" ? <CalendarView /> : <TaskColumn view={view} />}
+          {view === "calendar" ? (
+            <CalendarView />
+          ) : view === "scheduled" ? (
+            <ScheduledTasksView />
+          ) : (
+            <TaskColumn view={view} />
+          )}
           {chatPanelOpen && <ChatPanel />}
         </div>
       </div>

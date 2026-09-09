@@ -3,11 +3,20 @@ import { Types } from "mongoose";
 import { Task } from "@/lib/db/models/Task";
 import { Tab } from "@/lib/db/models/Tab";
 import { TimerSession } from "@/lib/db/models/TimerSession";
+import { buildRRule, formatRecurrenceLabel } from "@/lib/calendar/recurrence";
 import type Anthropic from "@anthropic-ai/sdk";
 
 /** A proposal is what a `propose*` tool returns — never a direct DB write. */
 export interface ToolProposal {
-  actionType: "create-task" | "update-task" | "move-task" | "set-schedule" | "create-tab" | "archive-task";
+  actionType:
+    | "create-task"
+    | "update-task"
+    | "move-task"
+    | "set-schedule"
+    | "create-tab"
+    | "archive-task"
+    | "create-scheduled-task"
+    | "delete-scheduled-task";
   summary: string;
   proposedPayload: Record<string, unknown>;
   beforeSnapshot: Record<string, unknown> | null;
@@ -38,7 +47,9 @@ type ToolDef = ReadToolDef<any> | ProposeToolDef<any>;
 
 async function resolveTabId(userId: string, tabIdOrName: string): Promise<string> {
   if (Types.ObjectId.isValid(tabIdOrName)) return tabIdOrName;
-  const tab = await Tab.findOne({ userId, name: new RegExp(`^${tabIdOrName}$`, "i"), status: "active" });
+  // Escape regex special characters to prevent injection from LLM-supplied tab names
+  const escaped = tabIdOrName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tab = await Tab.findOne({ userId, name: new RegExp(`^${escaped}$`, "i"), status: "active" });
   if (!tab) throw new Error(`No tab named "${tabIdOrName}" found.`);
   return String(tab._id);
 }
@@ -110,6 +121,21 @@ const proposeCreateTabSchema = z.object({
 
 const proposeArchiveTaskSchema = z.object({
   taskId: z.string(),
+});
+
+const proposeCreateScheduledTaskSchema = z.object({
+  title: z.string(),
+  startTime: z.string().regex(/^\d{1,2}:\d{2}$/, "HH:mm format (e.g. 19:00, 08:30)"),
+  durationMinutes: z.number().min(5).max(1440).default(30),
+  recurrenceType: z.enum(["daily", "weekdays", "weekly", "biweekly", "custom"]).default("daily"),
+  daysOfWeek: z.array(z.number().min(0).max(6)).optional(),
+  intervalWeeks: z.number().optional(),
+  reminderMinutes: z.number().default(10),
+  description: z.string().optional(),
+});
+
+const proposeDeleteScheduledTaskSchema = z.object({
+  scheduledTaskId: z.string(),
 });
 
 export const TOOLS: Record<string, ToolDef> = {
@@ -343,6 +369,71 @@ export const TOOLS: Record<string, ToolDef> = {
         summary: `Archive "${task.title}"`,
         proposedPayload: { taskId: input.taskId },
         beforeSnapshot: JSON.parse(JSON.stringify(task)),
+      };
+    },
+  },
+
+  proposeCreateScheduledTask: {
+    kind: "propose",
+    description:
+      "Propose creating a recurring scheduled task/series (e.g. 'Every day at 7:00 PM meet', 'Mon/Wed/Fri at 2:30 PM meet', 'Every Sunday at 8:00 AM contest', 'Every alternate Saturday at 8:00 AM LeetCode contest'). Does NOT write to DB or Google Calendar without user approval.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Title of the scheduled task" },
+        startTime: { type: "string", description: "Time of day in HH:mm 24-hour format, e.g. '19:00' or '08:00'" },
+        durationMinutes: { type: "number", description: "Duration in minutes" },
+        recurrenceType: { type: "string", enum: ["daily", "weekdays", "weekly", "biweekly", "custom"] },
+        daysOfWeek: { type: "array", items: { type: "number" }, description: "0=Sunday, 1=Monday, ..., 6=Saturday" },
+        intervalWeeks: { type: "number", description: "Recurrence interval, e.g. 2 for alternate weeks" },
+        reminderMinutes: { type: "number", description: "Reminder minutes before event, default 10" },
+        description: { type: "string", description: "Optional description" },
+      },
+      required: ["title", "startTime"],
+    },
+    zodSchema: proposeCreateScheduledTaskSchema,
+    handler: async (_userId, input) => {
+      const rrule = buildRRule({
+        type: input.recurrenceType,
+        daysOfWeek: input.daysOfWeek,
+        intervalWeeks: input.intervalWeeks,
+      });
+      const label = formatRecurrenceLabel(rrule, input.startTime);
+      return {
+        actionType: "create-scheduled-task",
+        summary: `Schedule recurring task "${input.title}" (${label}) with ${input.reminderMinutes}m reminder`,
+        proposedPayload: {
+          title: input.title,
+          startTime: input.startTime,
+          durationMinutes: input.durationMinutes,
+          recurrenceRule: rrule,
+          recurrenceLabel: label,
+          reminderMinutes: input.reminderMinutes,
+          description: input.description,
+        },
+        beforeSnapshot: null,
+      };
+    },
+  },
+
+  proposeDeleteScheduledTask: {
+    kind: "propose",
+    description: "Propose deleting a recurring scheduled task. Does NOT write to DB without user approval.",
+    inputSchema: {
+      type: "object",
+      properties: { scheduledTaskId: { type: "string" } },
+      required: ["scheduledTaskId"],
+    },
+    zodSchema: proposeDeleteScheduledTaskSchema,
+    handler: async (userId, input) => {
+      const { ScheduledTask } = await import("@/lib/db/models/ScheduledTask");
+      const existing = await ScheduledTask.findOne({ _id: input.scheduledTaskId, userId }).lean();
+      if (!existing) throw new Error("Scheduled task not found.");
+      return {
+        actionType: "delete-scheduled-task",
+        summary: `Delete scheduled recurring task "${existing.title}"`,
+        proposedPayload: { scheduledTaskId: input.scheduledTaskId },
+        beforeSnapshot: JSON.parse(JSON.stringify(existing)),
       };
     },
   },

@@ -9,6 +9,7 @@ export interface ChatTurnInput {
   systemPrompt: string;
   /** Prior turns, oldest first, NOT including the newest user message (already the last item). */
   history: ChatTurnMessage[];
+  model?: string;
 }
 
 export interface ChatTurnResult {

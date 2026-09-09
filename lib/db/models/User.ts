@@ -4,6 +4,14 @@ const UserSchema = new Schema(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
+    googleCalendar: {
+      connected: { type: Boolean, default: false },
+      connectedEmail: { type: String, default: null },
+      encryptedRefreshToken: { type: String, default: null },
+      iv: { type: String, default: null },
+      tag: { type: String, default: null },
+      connectedAt: { type: Date, default: null },
+    },
   },
   { timestamps: true }
 );
