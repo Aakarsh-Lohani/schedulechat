@@ -49,3 +49,47 @@
   outline-offset: 3px;
   border-radius: t.$radius-md;
 }
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: t.$text-primary;
+  cursor: pointer;
+  user-select: none;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+
+.countPill {
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-muted;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-family: t.$font-mono;
+}
+
+.sectionEmpty {
+  color: t.$text-muted;
+  font-size: 12px;
+  font-style: italic;
+  padding: 6px 2px;
+}
