@@ -108,3 +108,67 @@ export function formatTimeOfDay(time24: string): string {
   const mFormatted = String(m).padStart(2, "0");
   return `${h}:${mFormatted} ${ampm}`;
 }
+
+/**
+ * Parses an RFC 5545 RRULE string back into RecurrenceConfig.
+ */
+export function parseRRule(rrule: string): { type: RecurrenceType; daysOfWeek: number[] } {
+  if (rrule.includes("FREQ=DAILY")) {
+    return { type: "daily", daysOfWeek: [0, 1, 2, 3, 4, 5, 6] };
+  }
+  if (rrule.includes("BYDAY=MO,TU,WE,TH,FR")) {
+    return { type: "weekdays", daysOfWeek: [1, 2, 3, 4, 5] };
+  }
+  const isBiweekly = rrule.includes("INTERVAL=2");
+  const byDayMatch = rrule.match(/BYDAY=([A-Z,]+)/);
+  if (byDayMatch && byDayMatch[1]) {
+    const codes = byDayMatch[1].split(",");
+    const days = codes
+      .map((c) => DAY_CODES.indexOf(c as typeof DAY_CODES[number]))
+      .filter((d) => d >= 0);
+    if (isBiweekly) {
+      return { type: "biweekly", daysOfWeek: days.length > 0 ? days : [6] };
+    }
+    if (days.length === 1) {
+      return { type: "weekly", daysOfWeek: days };
+    }
+    return { type: "custom", daysOfWeek: days };
+  }
+  return { type: "daily", daysOfWeek: [0, 1, 2, 3, 4, 5, 6] };
+}
+
+/**
+ * Determines whether a given recurrence rule matches a target date.
+ */
+export function doesRRuleOccurOnDate(rrule: string, targetDate: Date, anchorDate?: Date): boolean {
+  if (rrule.includes("FREQ=DAILY")) return true;
+
+  const day = targetDate.getDay();
+
+  if (rrule.includes("BYDAY=MO,TU,WE,TH,FR")) {
+    return day >= 1 && day <= 5;
+  }
+
+  const byDayMatch = rrule.match(/BYDAY=([A-Z,]+)/);
+  if (!byDayMatch || !byDayMatch[1]) return false;
+
+  const codes = byDayMatch[1].split(",");
+  const days = codes.map((c) => DAY_CODES.indexOf(c as typeof DAY_CODES[number]));
+
+  if (!days.includes(day)) return false;
+
+  // If biweekly (INTERVAL=2), verify even-week cycle relative to anchor
+  if (rrule.includes("INTERVAL=2")) {
+    const anchor = anchorDate ? new Date(anchorDate) : new Date(2026, 0, 4); // Jan 4 2026 was a Sunday
+    anchor.setHours(0, 0, 0, 0);
+    const target = new Date(targetDate);
+    target.setHours(0, 0, 0, 0);
+
+    const diffDays = Math.round((target.getTime() - anchor.getTime()) / (1000 * 60 * 60 * 24));
+    const diffWeeks = Math.floor(diffDays / 7);
+    return Math.abs(diffWeeks) % 2 === 0;
+  }
+
+  return true;
+}
+
