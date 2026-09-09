@@ -58,9 +58,12 @@ export async function GET(req: Request) {
     ];
   }
   if (from && to) {
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
     query.$or = [
-      { scheduledDate: { $gte: new Date(from), $lte: new Date(to) } },
-      { startDate: { $lte: new Date(to) }, endDate: { $gte: new Date(from) } },
+      { scheduledDate: { $gte: fromDate, $lte: toDate } },
+      { startDate: { $lte: toDate }, endDate: { $gte: fromDate } },
+      { updatedAt: { $gte: fromDate, $lte: toDate }, status: "done" },
     ];
   }
 
