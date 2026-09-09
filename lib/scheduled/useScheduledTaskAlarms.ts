@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useScheduledTasks, useStartTimer, useTasks, useCreateTask, useTabs } from "@/lib/api/hooks";
+import {
+  useScheduledTasks,
+  useStartTimer,
+  useTasks,
+  useCreateTask,
+  useTabs,
+  useActiveTimers,
+} from "@/lib/api/hooks";
 import { doesRRuleOccurOnDate } from "@/lib/calendar/recurrence";
 import type { AlarmItem } from "@/components/scheduled/AlarmDialog";
 
@@ -9,6 +16,7 @@ export function useScheduledTaskAlarms() {
   const { data: scheduledTasks } = useScheduledTasks();
   const { data: todayTasks } = useTasks({}, "today");
   const { data: tabs } = useTabs();
+  const { data: activeTimers } = useActiveTimers();
   const startTimer = useStartTimer();
   const createTask = useCreateTask();
 
@@ -23,6 +31,15 @@ export function useScheduledTaskAlarms() {
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission().catch(() => {});
     }
+  }, []);
+
+  // Materialize today's scheduled tasks on mount and date changes
+  useEffect(() => {
+    fetch("/api/scheduled-tasks/materialize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tzOffsetMinutes: new Date().getTimezoneOffset() }),
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -53,7 +70,7 @@ export function useScheduledTaskAlarms() {
         if (startH === undefined || startM === undefined) continue;
         const taskStartMins = startH * 60 + startM;
 
-        // 1. Alarm Condition: Starting Now (within current minute window)
+        // 1. Alarm / Auto-Start Condition: Starting Now (within current minute window)
         const alarmKey = `${task.id}-alarm-${todayDateStr}-${task.startTime}`;
         if (nowMins === taskStartMins && !alertedRef.current.has(alarmKey)) {
           alertedRef.current.add(alarmKey);
@@ -63,6 +80,29 @@ export function useScheduledTaskAlarms() {
             (t) => t.title.toLowerCase() === task.title.toLowerCase()
           );
 
+          // Check if either slot is idle
+          const slot1Free = !activeTimers?.slots["1"];
+          const slot2Free = !activeTimers?.slots["2"];
+          const availableSlot: 1 | 2 | null = slot1Free ? 1 : slot2Free ? 2 : null;
+
+          // If a slot is free and we have a task ID, automatically start the timer!
+          if (availableSlot && matchingTodayTask) {
+            startTimer.mutate({ taskId: matchingTodayTask.id, slot: availableSlot });
+
+            if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+              try {
+                new Notification(`Scheduled Task Started: ${task.title}`, {
+                  body: `Began automatically in Timer Slot ${availableSlot} (${task.durationMinutes} mins planned)`,
+                  icon: "/favicon.ico",
+                });
+              } catch {
+                // ignore
+              }
+            }
+            return;
+          }
+
+          // If both slots are occupied or task is not yet found, show interactive dialog
           setActiveAlarm({
             id: task.id,
             title: task.title,
@@ -73,7 +113,6 @@ export function useScheduledTaskAlarms() {
             taskId: matchingTodayTask?.id,
           });
 
-          // Trigger native desktop notification if supported
           if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
             try {
               new Notification(`Scheduled Task Starting Now: ${task.title}`, {
@@ -81,7 +120,7 @@ export function useScheduledTaskAlarms() {
                 icon: "/favicon.ico",
               });
             } catch {
-              // Notification construct error
+              // ignore
             }
           }
           return;
@@ -125,7 +164,7 @@ export function useScheduledTaskAlarms() {
     checkAlarms();
     const interval = setInterval(checkAlarms, 10000);
     return () => clearInterval(interval);
-  }, [scheduledTasks, todayTasks]);
+  }, [scheduledTasks, todayTasks, activeTimers?.slots, startTimer]);
 
   async function handleStartInSlot(slot: 1 | 2, item: AlarmItem) {
     let taskId = item.taskId;

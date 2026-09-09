@@ -20,6 +20,7 @@ export interface TaskDTO {
   scheduledDate: string | null;
   startDate: string | null;
   endDate: string | null;
+  scheduledTaskId?: string | null;
   order: number;
 }
 
