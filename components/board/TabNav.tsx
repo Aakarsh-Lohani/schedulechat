@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { X, Plus, Calendar } from "lucide-react";
+import { X, Plus, Calendar, CalendarClock } from "lucide-react";
 import { useCreateTab, useDeleteTab, useTabs, useTasks } from "@/lib/api/hooks";
 import { useUIStore } from "@/lib/store/uiStore";
 import type { BoardView } from "@/lib/store/uiStore";
@@ -110,6 +110,17 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
         }
         active={view === "calendar"}
         onClick={() => onChangeView("calendar")}
+      />
+      <NavItem
+        id="scheduled"
+        label={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <CalendarClock size={13} />
+            Scheduled Tasks
+          </span>
+        }
+        active={view === "scheduled"}
+        onClick={() => onChangeView("scheduled")}
       />
 
       {adding ? (

@@ -226,3 +226,85 @@ export function useSendChat() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-actions"] }),
   });
 }
+
+// ---- Google Calendar ----
+
+export function useGoogleCalendarStatus() {
+  return useQuery({
+    queryKey: ["google-calendar-status"],
+    queryFn: () =>
+      apiFetch<{ isConfigured: boolean; connected: boolean; email?: string }>("/api/calendar/google/status"),
+  });
+}
+
+export function useDisconnectGoogleCalendar() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ success: boolean }>("/api/calendar/google/disconnect", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["google-calendar-status"] });
+      qc.invalidateQueries({ queryKey: ["scheduled-tasks"] });
+    },
+  });
+}
+
+// ---- Scheduled Tasks ----
+
+export function useScheduledTasks() {
+  return useQuery({
+    queryKey: ["scheduled-tasks"],
+    queryFn: () =>
+      apiFetch<{ scheduledTasks: import("./types").ScheduledTaskDTO[] }>("/api/scheduled-tasks").then(
+        (r) => r.scheduledTasks
+      ),
+  });
+}
+
+export function useCreateScheduledTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input: Partial<import("./types").ScheduledTaskDTO> & {
+        title: string;
+        startTime: string;
+        recurrenceRule: string;
+      }
+    ) =>
+      apiFetch<{ scheduledTask: import("./types").ScheduledTaskDTO }>("/api/scheduled-tasks", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["scheduled-tasks"] });
+      qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+    },
+  });
+}
+
+export function useUpdateScheduledTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...fields }: { id: string } & Partial<import("./types").ScheduledTaskDTO>) =>
+      apiFetch<{ scheduledTask: import("./types").ScheduledTaskDTO }>(`/api/scheduled-tasks/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(fields),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["scheduled-tasks"] });
+      qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+    },
+  });
+}
+
+export function useDeleteScheduledTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ success: boolean }>(`/api/scheduled-tasks/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["scheduled-tasks"] });
+      qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+    },
+  });
+}
+

@@ -1,0 +1,360 @@
+@use "../../styles/tokens" as t;
+
+.container {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.title {
+  font-family: t.$font-display;
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.sub {
+  color: t.$text-muted;
+  font-size: 12.5px;
+  margin: 0 0 18px;
+}
+
+.newBtn {
+  background: t.$accent-ai;
+  color: #181225;
+  border: none;
+  border-radius: t.$radius-sm;
+  padding: 7px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.calendarCard {
+  background: t.$bg-panel;
+  border: 1px solid t.$border-subtle;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.calendarInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.calendarIcon {
+  color: #60a5fa;
+}
+
+.calendarDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.calendarTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: t.$text-primary;
+}
+
+.calendarSub {
+  font-size: 12px;
+  color: t.$text-muted;
+}
+
+.calendarBtn {
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-primary;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+}
+
+.disconnectBtn {
+  background: none;
+  border: 1px solid t.$border-subtle;
+  color: t.$status-red;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  cursor: pointer;
+
+  &:hover {
+    border-color: t.$status-red;
+    background: rgba(248, 113, 113, 0.08);
+  }
+}
+
+.seriesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.seriesCard {
+  background: t.$bg-panel;
+  border: 1px solid t.$border-subtle;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  &.disabled {
+    opacity: 0.55;
+  }
+}
+
+.cardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cardTitle {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: t.$text-primary;
+  margin: 0;
+}
+
+.cardActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.iconBtn {
+  background: none;
+  border: none;
+  color: t.$text-muted;
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: t.$text-primary;
+    background: t.$bg-elevated;
+  }
+
+  &.delete:hover {
+    color: t.$status-red;
+  }
+}
+
+.cardDesc {
+  font-size: 12.5px;
+  color: t.$text-muted;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.badge {
+  font-size: 11px;
+  font-family: t.$font-mono;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  &.recurrence {
+    background: rgba(167, 139, 250, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(167, 139, 250, 0.25);
+  }
+
+  &.duration {
+    background: t.$bg-elevated;
+    color: t.$text-muted;
+  }
+
+  &.google {
+    background: rgba(96, 165, 250, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(96, 165, 250, 0.25);
+  }
+}
+
+.emptyState {
+  background: t.$bg-panel;
+  border: 1px dashed t.$border-subtle;
+  border-radius: 10px;
+  padding: 32px;
+  text-align: center;
+  color: t.$text-muted;
+  font-size: 13px;
+}
+
+/* Modal styles */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: t.$bg-panel;
+  border: 1px solid t.$border-subtle;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 480px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modalHeading {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: t.$text-muted;
+  font-weight: 500;
+
+  input, select, textarea {
+    background: t.$bg-elevated;
+    border: 1px solid t.$border-subtle;
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: t.$text-primary;
+    font-size: 13px;
+    outline: none;
+
+    &:focus {
+      border-color: t.$accent-ai;
+    }
+  }
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.daysRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dayChip {
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-muted;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+
+  &.active {
+    background: t.$accent-ai;
+    color: #181225;
+    font-weight: 700;
+    border-color: t.$accent-ai;
+  }
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: t.$text-primary;
+  cursor: pointer;
+
+  input {
+    cursor: pointer;
+  }
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.cancelBtn {
+  background: none;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-muted;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  cursor: pointer;
+
+  &:hover {
+    color: t.$text-primary;
+  }
+}
+
+.saveBtn {
+  background: t.$accent-ai;
+  color: #181225;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 16px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}

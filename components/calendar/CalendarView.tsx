@@ -7,9 +7,7 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   Clock,
-  CheckCircle2,
   Plus,
-  Play,
 } from "lucide-react";
 import { useCalendarTasks, useUpdateTask } from "@/lib/api/hooks";
 import { budgetStatus } from "@/lib/timers/budget";
@@ -379,6 +377,35 @@ export function CalendarView() {
       ) : (
         /* Timeline Gantt View */
         <>
+          <div className={styles.controls}>
+            <button
+              type="button"
+              className={styles.navBtn}
+              onClick={() => setWeekStart((prev) => new Date(prev.getTime() - 7 * DAY_MS))}
+              title="Previous Week"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className={styles.monthTitle}>
+              Week of {weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {weekEnd.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+            </span>
+            <button
+              type="button"
+              className={styles.navBtn}
+              onClick={() => setWeekStart((prev) => new Date(prev.getTime() + 7 * DAY_MS))}
+              title="Next Week"
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              type="button"
+              className={styles.todayBtn}
+              onClick={() => setWeekStart(startOfWeek(new Date()))}
+            >
+              This Week
+            </button>
+          </div>
+
           {rows.length === 0 ? (
             <p className={styles.empty}>No tasks with dates this week yet — set a start/end date on a task to see it here.</p>
           ) : (

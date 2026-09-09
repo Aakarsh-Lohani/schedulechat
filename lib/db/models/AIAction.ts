@@ -5,7 +5,16 @@ const AIActionSchema = new Schema(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     type: {
       type: String,
-      enum: ["create-task", "update-task", "move-task", "set-schedule", "create-tab", "archive-task"],
+      enum: [
+        "create-task",
+        "update-task",
+        "move-task",
+        "set-schedule",
+        "create-tab",
+        "archive-task",
+        "create-scheduled-task",
+        "delete-scheduled-task",
+      ],
       required: true,
     },
     mode: { type: String, enum: ["suggest", "update"], required: true },

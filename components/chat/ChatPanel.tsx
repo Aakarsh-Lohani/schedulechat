@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, AlertTriangle } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useUIStore } from "@/lib/store/uiStore";
 import {
   useAiActions,

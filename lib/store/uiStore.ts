@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type BoardView = "today" | "calendar" | string; // string = a tabId
+export type BoardView = "today" | "scheduled" | "calendar" | string; // string = a tabId
 
 interface UIState {
   view: BoardView;
