@@ -37,6 +37,7 @@ export interface TimerSlotDTO {
 export interface ActiveTimersDTO {
   slots: Record<"1" | "2", TimerSlotDTO | null>;
   completedSecondsTodayBase: number;
+  totalUsageSeconds: number;
 }
 
 export interface AIActionDTO {

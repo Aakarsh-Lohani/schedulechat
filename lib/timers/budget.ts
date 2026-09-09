@@ -51,3 +51,36 @@ export function formatClock(totalSeconds: number): string {
   const sec = s % 60;
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
+
+/**
+ * Calculates live seconds strictly belonging to today, bounded between 0 and 24 hours (86,400s).
+ * Prevents 194h multi-day timer overflow bugs.
+ */
+export function calculateTodayBoundedSeconds(
+  completedTodayBase: number,
+  activeSessions: Array<{
+    startedAt: string | number | Date;
+    plannedDurationSeconds: number;
+    extendedBySeconds: number;
+  }>,
+  nowMs: number,
+  todayMidnightMs: number,
+  countdownSeconds = 5
+): { todayTotalSeconds: number; liveSecondsToday: number } {
+  let liveSecondsToday = 0;
+
+  for (const s of activeSessions) {
+    const startedAtMs = new Date(s.startedAt).getTime();
+    const maxDuration = s.plannedDurationSeconds + s.extendedBySeconds;
+    const effectiveStartMs = Math.max(startedAtMs, todayMidnightMs);
+    const hasCountdownToday = startedAtMs >= todayMidnightMs;
+    const elapsed = Math.max(0, (nowMs - effectiveStartMs) / 1000 - (hasCountdownToday ? countdownSeconds : 0));
+    const cappedElapsed = Math.min(maxDuration, elapsed);
+    liveSecondsToday += cappedElapsed;
+  }
+
+  const rawToday = Math.max(0, completedTodayBase) + liveSecondsToday;
+  const todayTotalSeconds = Math.min(86400, rawToday);
+
+  return { todayTotalSeconds, liveSecondsToday };
+}
