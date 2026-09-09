@@ -47,7 +47,9 @@ type ToolDef = ReadToolDef<any> | ProposeToolDef<any>;
 
 async function resolveTabId(userId: string, tabIdOrName: string): Promise<string> {
   if (Types.ObjectId.isValid(tabIdOrName)) return tabIdOrName;
-  const tab = await Tab.findOne({ userId, name: new RegExp(`^${tabIdOrName}$`, "i"), status: "active" });
+  // Escape regex special characters to prevent injection from LLM-supplied tab names
+  const escaped = tabIdOrName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tab = await Tab.findOne({ userId, name: new RegExp(`^${escaped}$`, "i"), status: "active" });
   if (!tab) throw new Error(`No tab named "${tabIdOrName}" found.`);
   return String(tab._id);
 }

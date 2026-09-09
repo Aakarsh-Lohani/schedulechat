@@ -147,7 +147,12 @@ export async function undoExecutedAction(
         if (after.googleEventId) {
           await deleteGoogleEvent(userId, String(after.googleEventId));
         }
-        await ScheduledTask.deleteOne({ _id: after._id, userId });
+        // Soft-delete: disable instead of hard-deleting, per Engineering Rule 3
+        // ("No task is ever hard-deleted by the AI")
+        await ScheduledTask.findOneAndUpdate(
+          { _id: after._id, userId },
+          { $set: { enabled: false, googleEventId: null } }
+        );
       }
       return;
     }

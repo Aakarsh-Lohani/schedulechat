@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/db/connect";
 import { User } from "@/lib/db/models/User";
-import { encryptString, decryptString } from "@/lib/security/crypto";
+import { encryptString, decryptString, createOAuthStateToken } from "@/lib/security/crypto";
 import { logger } from "@/lib/logger";
 
 const GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -41,7 +41,7 @@ export function getGoogleAuthUrl(userId: string): { url: string | null; isConfig
     scope: SCOPES,
     access_type: "offline",
     prompt: "consent",
-    state: userId,
+    state: createOAuthStateToken(userId),
   });
 
   return { url: `${GOOGLE_AUTH_ENDPOINT}?${params.toString()}`, isConfigured: true };
@@ -211,6 +211,9 @@ export async function disconnectGoogleCalendar(userId: string): Promise<boolean>
 
 /**
  * Calculates start and end ISO datetime for the next occurrence of a recurring task.
+ * Returns offset-less local datetime strings (e.g. "2026-09-10T19:00:00") so that
+ * Google Calendar API interprets them in the provided timeZone field, rather than
+ * treating them as UTC (which `.toISOString()`'s trailing "Z" would cause).
  */
 function calculateFirstOccurrence(startTime: string, durationMinutes: number): { startIso: string; endIso: string } {
   const [hStr, mStr] = startTime.split(":");
@@ -228,9 +231,18 @@ function calculateFirstOccurrence(startTime: string, durationMinutes: number): {
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
 
   return {
-    startIso: start.toISOString(),
-    endIso: end.toISOString(),
+    startIso: toLocalISOString(start),
+    endIso: toLocalISOString(end),
   };
+}
+
+/**
+ * Formats a Date as a local datetime string without timezone suffix.
+ * e.g. "2026-09-10T19:00:00"  (no "Z", no "+05:30")
+ */
+function toLocalISOString(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 /**

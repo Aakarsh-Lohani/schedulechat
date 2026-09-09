@@ -55,6 +55,9 @@ export function formatClock(totalSeconds: number): string {
 /**
  * Calculates live seconds strictly belonging to today, bounded between 0 and 24 hours (86,400s).
  * Prevents 194h multi-day timer overflow bugs.
+ *
+ * For a timer that started before midnight, we compute the overlap of the timer's
+ * active window [startedAt + countdown, expectedEnd] with today's window [midnight, now].
  */
 export function calculateTodayBoundedSeconds(
   completedTodayBase: number,
@@ -72,11 +75,19 @@ export function calculateTodayBoundedSeconds(
   for (const s of activeSessions) {
     const startedAtMs = new Date(s.startedAt).getTime();
     const maxDuration = s.plannedDurationSeconds + s.extendedBySeconds;
-    const effectiveStartMs = Math.max(startedAtMs, todayMidnightMs);
-    const hasCountdownToday = startedAtMs >= todayMidnightMs;
-    const elapsed = Math.max(0, (nowMs - effectiveStartMs) / 1000 - (hasCountdownToday ? countdownSeconds : 0));
-    const cappedElapsed = Math.min(maxDuration, elapsed);
-    liveSecondsToday += cappedElapsed;
+
+    // The timer's effective work window starts after the countdown
+    const workStartMs = startedAtMs + countdownSeconds * 1000;
+    // The timer's expected end time (or now if still running)
+    const expectedEndMs = workStartMs + maxDuration * 1000;
+    const actualEndMs = Math.min(nowMs, expectedEndMs);
+
+    // Compute overlap of [workStartMs, actualEndMs] with [todayMidnightMs, now]
+    const overlapStartMs = Math.max(workStartMs, todayMidnightMs);
+    const overlapEndMs = actualEndMs; // already <= nowMs
+
+    const overlapMs = Math.max(0, overlapEndMs - overlapStartMs);
+    liveSecondsToday += overlapMs / 1000;
   }
 
   const rawToday = Math.max(0, completedTodayBase) + liveSecondsToday;
@@ -84,3 +95,4 @@ export function calculateTodayBoundedSeconds(
 
   return { todayTotalSeconds, liveSecondsToday };
 }
+

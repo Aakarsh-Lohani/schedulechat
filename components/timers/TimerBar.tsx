@@ -149,13 +149,13 @@ export function TimerBar() {
         );
         liveSecondsTotal += totalElapsed;
 
-        // Only count elapsed time that occurred TODAY
-        const effectiveStartMs = Math.max(startedAtMs, todayMidnightMs);
-        const elapsedToday = Math.min(
-          maxDurationSeconds,
-          Math.max(0, (now - effectiveStartMs) / 1000 - (startedAtMs >= todayMidnightMs ? COUNTDOWN_SECONDS : 0))
-        );
-        liveSecondsToday += elapsedToday;
+        // Compute overlap of timer's work window with today
+        const workStartMs = startedAtMs + COUNTDOWN_SECONDS * 1000;
+        const expectedEndMs = workStartMs + maxDurationSeconds * 1000;
+        const actualEndMs = Math.min(now, expectedEndMs);
+        const overlapStartMs = Math.max(workStartMs, todayMidnightMs);
+        const overlapMs = Math.max(0, actualEndMs - overlapStartMs);
+        liveSecondsToday += overlapMs / 1000;
       }
     }
   }

@@ -21,7 +21,8 @@ describe("calculateTodayBoundedSeconds", () => {
     const todayMidnight = new Date("2026-09-09T00:00:00Z").getTime();
     const now = new Date("2026-09-09T02:00:00Z").getTime(); // 2 hours after midnight
 
-    // Session started 8 days ago (approx 192+ hours ago)
+    // Session started 8 days ago with only 30 minutes planned duration.
+    // This timer expired 8 days ago — it should contribute ZERO to today.
     const eightDaysAgo = todayMidnight - 8 * 24 * 60 * 60 * 1000;
 
     const result = calculateTodayBoundedSeconds(
@@ -29,7 +30,7 @@ describe("calculateTodayBoundedSeconds", () => {
       [
         {
           startedAt: eightDaysAgo,
-          plannedDurationSeconds: 1800, // 30 mins
+          plannedDurationSeconds: 1800, // 30 mins — expired 8 days ago
           extendedBySeconds: 0,
         },
       ],
@@ -37,10 +38,34 @@ describe("calculateTodayBoundedSeconds", () => {
       todayMidnight
     );
 
-    // Bounded by maxDuration (30 mins = 1800s), NOT 194 hours!
-    expect(result.todayTotalSeconds).toBe(1800);
+    // Timer expired 8 days ago, so 0 seconds belong to today (not 1800, not 194h)
+    expect(result.todayTotalSeconds).toBe(0);
     expect(result.todayTotalSeconds).toBeLessThanOrEqual(86400);
-    expect(formatDuration(result.todayTotalSeconds)).toBe("30m");
+  });
+
+  it("correctly computes today portion for overnight timer still running", () => {
+    const todayMidnight = new Date("2026-09-09T00:00:00Z").getTime();
+    const now = new Date("2026-09-09T01:00:00Z").getTime(); // 1 hour after midnight
+
+    // Timer started at 11 PM yesterday with 3 hours planned (running 11PM-2AM)
+    const lastNight11pm = todayMidnight - 1 * 3600 * 1000; // 1 hour before midnight
+
+    const result = calculateTodayBoundedSeconds(
+      0,
+      [
+        {
+          startedAt: lastNight11pm,
+          plannedDurationSeconds: 3 * 3600, // 3 hours
+          extendedBySeconds: 0,
+        },
+      ],
+      now,
+      todayMidnight
+    );
+
+    // Timer's work window (after 5s countdown) overlaps today from midnight to now (1 hour)
+    expect(result.todayTotalSeconds).toBe(3600); // 1 hour
+    expect(result.todayTotalSeconds).toBeLessThanOrEqual(86400);
   });
 
   it("accurately accumulates today's elapsed seconds for sessions started today", () => {
@@ -66,3 +91,4 @@ describe("calculateTodayBoundedSeconds", () => {
     expect(formatDuration(result.todayTotalSeconds)).toBe("1h 15m");
   });
 });
+
