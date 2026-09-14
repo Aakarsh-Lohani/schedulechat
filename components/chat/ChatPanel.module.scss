@@ -130,12 +130,25 @@
 .approvalHead {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   color: t.$accent-ai;
   font-weight: 700;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.typeBadge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .approvalSummary {

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Check, X, Plus, Trash2, CalendarClock, Pencil } from "lucide-react";
 import { useUIStore } from "@/lib/store/uiStore";
+import { MarkdownContent } from "./MarkdownContent";
 import {
   useAiActions,
   useApproveAction,
@@ -25,6 +26,23 @@ const GEMINI_MODELS = [
   { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
   { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
 ];
+
+function getActionBadge(type: string) {
+  switch (type) {
+    case "create-task":
+      return { label: "Create Task", icon: <Plus size={11} />, color: "#60a5fa" };
+    case "update-task":
+      return { label: "Update Task", icon: <Pencil size={11} />, color: "#f5a623" };
+    case "delete-task":
+      return { label: "Delete Task", icon: <Trash2 size={11} />, color: "#f0605a" };
+    case "create-scheduled-task":
+      return { label: "Schedule Series", icon: <CalendarClock size={11} />, color: "#a78bfa" };
+    case "delete-scheduled-task":
+      return { label: "Delete Series", icon: <Trash2 size={11} />, color: "#f0605a" };
+    default:
+      return { label: "Change", icon: <Sparkles size={11} />, color: "#a78bfa" };
+  }
+}
 
 export function ChatPanel() {
   const { chatMode, setChatMode } = useUIStore();
@@ -110,37 +128,55 @@ export function ChatPanel() {
         {messages.map((m, i) => (
           <div key={i} className={`${styles.msg} ${m.role === "user" ? styles.user : styles.assistant}`}>
             {m.role === "assistant" && <div className={styles.role}>Copilot</div>}
-            {m.content}
+            {m.role === "assistant" ? <MarkdownContent content={m.content} /> : m.content}
           </div>
         ))}
 
-        {proposed.map((action) => (
-          <div key={action.id} className={styles.approvalCard}>
-            <div className={styles.approvalHead}>
-              <Sparkles size={13} />
-              Proposed change
+        {proposed.map((action) => {
+          const badge = getActionBadge(action.type);
+          return (
+            <div key={action.id} className={styles.approvalCard}>
+              <div className={styles.approvalHead}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <Sparkles size={12} />
+                  <span>Confirmation Required</span>
+                </div>
+                <span
+                  className={styles.typeBadge}
+                  style={{
+                    backgroundColor: `${badge.color}20`,
+                    color: badge.color,
+                    borderColor: `${badge.color}40`,
+                  }}
+                >
+                  {badge.icon}
+                  {badge.label}
+                </span>
+              </div>
+              <div className={styles.approvalSummary}>{action.summary}</div>
+              <div className={styles.approvalActions}>
+                <button
+                  type="button"
+                  className={`${styles.btn} ${styles.approve}`}
+                  disabled={approveAction.isPending}
+                  onClick={() => approveAction.mutate(action.id)}
+                >
+                  <Check size={12} style={{ display: "inline-block", verticalAlign: "middle", marginRight: 4 }} />
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.btn} ${styles.reject}`}
+                  disabled={rejectAction.isPending}
+                  onClick={() => rejectAction.mutate(action.id)}
+                >
+                  <X size={12} style={{ display: "inline-block", verticalAlign: "middle", marginRight: 4 }} />
+                  Reject
+                </button>
+              </div>
             </div>
-            <div className={styles.approvalSummary}>{action.summary}</div>
-            <div className={styles.approvalActions}>
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.approve}`}
-                disabled={approveAction.isPending}
-                onClick={() => approveAction.mutate(action.id)}
-              >
-                Approve
-              </button>
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.reject}`}
-                disabled={rejectAction.isPending}
-                onClick={() => rejectAction.mutate(action.id)}
-              >
-                Reject
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
 
         {sendChat.isPending && <div className={`${styles.msg} ${styles.assistant}`}>Thinking…</div>}
       </div>

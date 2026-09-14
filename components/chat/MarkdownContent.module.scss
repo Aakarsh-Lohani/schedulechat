@@ -1,0 +1,83 @@
+﻿@use "../../styles/tokens" as t;
+
+.markdown {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: t.$text-primary;
+  word-break: break-word;
+
+  p {
+    margin: 0 0 8px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: #fff;
+    font-weight: 600;
+    margin: 12px 0 6px;
+    line-height: 1.3;
+  }
+
+  h1 { font-size: 15px; }
+  h2 { font-size: 14px; }
+  h3 { font-size: 13px; color: t.$accent-ai; }
+  h4 { font-size: 12.5px; }
+
+  ul, ol {
+    margin: 4px 0 8px;
+    padding-left: 18px;
+  }
+
+  li {
+    margin-bottom: 4px;
+    color: t.$text-primary;
+
+    strong {
+      color: #fff;
+    }
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid t.$border-subtle;
+    margin: 10px 0;
+  }
+
+  code {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid t.$border-subtle;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: t.$font-mono;
+    font-size: 11.5px;
+    color: t.$accent-ai;
+  }
+
+  pre {
+    background: #111418;
+    border: 1px solid t.$border-subtle;
+    border-radius: 6px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin: 8px 0;
+
+    code {
+      background: none;
+      border: none;
+      padding: 0;
+      color: #d1d5db;
+      font-size: 11.5px;
+    }
+  }
+
+  blockquote {
+    border-left: 3px solid t.$accent-ai;
+    padding-left: 10px;
+    margin: 8px 0;
+    color: t.$text-muted;
+    font-style: italic;
+  }
+}

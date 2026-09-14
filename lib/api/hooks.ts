@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api/fetcher";
-import type { TabDTO, TaskDTO, ActiveTimersDTO, AIActionDTO, ChatReplyDTO } from "@/lib/api/types";
+import type { TabDTO, TaskDTO, ActiveTimersDTO, AIActionDTO, ChatReplyDTO, AnalyticsDataDTO } from "@/lib/api/types";
 
 // ---- Tabs ----
 
@@ -307,4 +307,16 @@ export function useDeleteScheduledTask() {
     },
   });
 }
+
+// ---- Analytics ----
+
+export function useAnalytics(tzOffset?: number) {
+  const offset = tzOffset ?? new Date().getTimezoneOffset();
+  return useQuery({
+    queryKey: ["analytics", offset],
+    queryFn: () => apiFetch<AnalyticsDataDTO>(`/api/analytics?tzOffset=${offset}`),
+    refetchInterval: 60000,
+  });
+}
+
 

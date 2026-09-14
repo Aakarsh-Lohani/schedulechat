@@ -9,6 +9,7 @@ import {
   Trash2,
   ExternalLink,
   Power,
+  Pencil,
 } from "lucide-react";
 import {
   useScheduledTasks,
@@ -18,7 +19,8 @@ import {
   useGoogleCalendarStatus,
   useDisconnectGoogleCalendar,
 } from "@/lib/api/hooks";
-import { buildRRule, type RecurrenceType } from "@/lib/calendar/recurrence";
+import { buildRRule, parseRRule, type RecurrenceType } from "@/lib/calendar/recurrence";
+import type { ScheduledTaskDTO } from "@/lib/api/types";
 import styles from "./ScheduledTasksView.module.scss";
 
 const DAYS_OF_WEEK = [
@@ -41,6 +43,7 @@ export function ScheduledTasksView() {
   const disconnectCalendar = useDisconnectGoogleCalendar();
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<ScheduledTaskDTO | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startTime, setStartTime] = useState("19:00");
@@ -54,6 +57,39 @@ export function ScheduledTasksView() {
     setSelectedDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()
     );
+  }
+
+  function handleOpenNew() {
+    setEditingTask(null);
+    setTitle("");
+    setDescription("");
+    setStartTime("19:00");
+    setDurationMinutes(30);
+    setRecurrenceType("daily");
+    setSelectedDays([1]);
+    setReminderMinutes(10);
+    setSyncToGoogle(true);
+    setModalOpen(true);
+  }
+
+  function handleOpenEdit(task: ScheduledTaskDTO) {
+    setEditingTask(task);
+    setTitle(task.title);
+    setDescription(task.description ?? "");
+    setStartTime(task.startTime);
+    setDurationMinutes(task.durationMinutes);
+    setReminderMinutes(task.reminderMinutes);
+    setSyncToGoogle(task.syncToGoogleCalendar);
+
+    const parsed = parseRRule(task.recurrenceRule);
+    setRecurrenceType(parsed.type);
+    setSelectedDays(parsed.daysOfWeek);
+    setModalOpen(true);
+  }
+
+  function handleCloseModal() {
+    setModalOpen(false);
+    setEditingTask(null);
   }
 
   async function handleConnectGoogle() {
@@ -70,7 +106,7 @@ export function ScheduledTasksView() {
     }
   }
 
-  async function handleSaveNewSeries() {
+  async function handleSaveSeries() {
     if (!title.trim() || !startTime) return;
 
     let rruleDays = selectedDays;
@@ -84,22 +120,31 @@ export function ScheduledTasksView() {
       intervalWeeks: recurrenceType === "biweekly" ? 2 : 1,
     });
 
-    await createScheduled.mutateAsync({
-      title: title.trim(),
-      description: description.trim(),
-      startTime,
-      durationMinutes,
-      recurrenceRule: rrule,
-      reminderMinutes,
-      syncToGoogleCalendar: syncToGoogle,
-      enabled: true,
-    });
+    if (editingTask) {
+      await updateScheduled.mutateAsync({
+        id: editingTask.id,
+        title: title.trim(),
+        description: description.trim(),
+        startTime,
+        durationMinutes,
+        recurrenceRule: rrule,
+        reminderMinutes,
+        syncToGoogleCalendar: syncToGoogle,
+      });
+    } else {
+      await createScheduled.mutateAsync({
+        title: title.trim(),
+        description: description.trim(),
+        startTime,
+        durationMinutes,
+        recurrenceRule: rrule,
+        reminderMinutes,
+        syncToGoogleCalendar: syncToGoogle,
+        enabled: true,
+      });
+    }
 
-    setModalOpen(false);
-    setTitle("");
-    setDescription("");
-    setStartTime("19:00");
-    setDurationMinutes(30);
+    handleCloseModal();
   }
 
   return (
@@ -114,7 +159,7 @@ export function ScheduledTasksView() {
         <button
           type="button"
           className={styles.newBtn}
-          onClick={() => setModalOpen(true)}
+          onClick={handleOpenNew}
         >
           <Plus size={14} />
           New scheduled task
@@ -177,6 +222,14 @@ export function ScheduledTasksView() {
                   <button
                     type="button"
                     className={styles.iconBtn}
+                    onClick={() => handleOpenEdit(task)}
+                    title="Edit scheduled task"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.iconBtn}
                     onClick={() => updateScheduled.mutate({ id: task.id, enabled: !task.enabled })}
                     title={task.enabled ? "Pause series" : "Enable series"}
                   >
@@ -235,9 +288,11 @@ export function ScheduledTasksView() {
 
       {/* New Series Modal */}
       {modalOpen && (
-        <div className={styles.modalOverlay} onClick={() => setModalOpen(false)}>
+        <div className={styles.modalOverlay} onClick={handleCloseModal}>
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalHeading}>New Scheduled Task (Recurring Series)</h3>
+            <h3 className={styles.modalHeading}>
+              {editingTask ? "Edit Scheduled Task" : "New Scheduled Task (Recurring Series)"}
+            </h3>
 
             <label className={styles.field}>
               Title
@@ -351,17 +406,17 @@ export function ScheduledTasksView() {
               <button
                 type="button"
                 className={styles.cancelBtn}
-                onClick={() => setModalOpen(false)}
+                onClick={handleCloseModal}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 className={styles.saveBtn}
-                onClick={handleSaveNewSeries}
+                onClick={handleSaveSeries}
                 disabled={!title.trim() || !startTime}
               >
-                Save scheduled task
+                {editingTask ? "Save changes" : "Save scheduled task"}
               </button>
             </div>
           </div>

@@ -20,6 +20,7 @@ export interface TaskDTO {
   scheduledDate: string | null;
   startDate: string | null;
   endDate: string | null;
+  scheduledTaskId?: string | null;
   order: number;
 }
 
@@ -70,4 +71,54 @@ export interface ScheduledTaskDTO {
   googleEventId: string | null;
   createdAt: string;
 }
+
+export interface AnalyticsTimelinePointDTO {
+  date: string;
+  label: string;
+  actualHours: number;
+  plannedHours: number;
+  actualMinutes: number;
+  plannedMinutes: number;
+}
+
+export interface AnalyticsOverrunTaskDTO {
+  id: string;
+  title: string;
+  tabName: string;
+  status: string;
+  progressPercent: number;
+  estimateMinutes: number;
+  trackedMinutes: number;
+  overrunMinutes: number;
+  isOverrun: boolean;
+  percentOfEstimate: number;
+}
+
+export interface AnalyticsTabDistributionDTO {
+  name: string;
+  hours: number;
+  minutes: number;
+}
+
+export interface AnalyticsDataDTO {
+  metrics: {
+    todaySeconds: number;
+    thisWeekSeconds: number;
+    thisMonthSeconds: number;
+    allTimeSeconds: number;
+    activeTasksCount: number;
+    completedTasksCount: number;
+    upcomingTasksCount: number;
+    totalTasksCount: number;
+  };
+  timelines: {
+    "7d": AnalyticsTimelinePointDTO[];
+    "14d": AnalyticsTimelinePointDTO[];
+    "30d": AnalyticsTimelinePointDTO[];
+  };
+  overrunTasks: AnalyticsOverrunTaskDTO[];
+  tabDistribution: AnalyticsTabDistributionDTO[];
+  updatedAt: string;
+}
+
 
