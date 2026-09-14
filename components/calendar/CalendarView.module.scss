@@ -115,3 +115,248 @@
   color: t.$text-muted;
   font-size: 13px;
 }
+
+.topRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.viewToggle {
+  display: flex;
+  background: t.$bg-elevated;
+  border-radius: t.$radius-sm;
+  padding: 3px;
+  gap: 2px;
+}
+
+.toggleBtn {
+  background: none;
+  border: none;
+  color: t.$text-muted;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+
+  &.active {
+    background: t.$bg-panel;
+    color: t.$text-primary;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.monthTitle {
+  font-size: 15px;
+  font-weight: 600;
+  min-width: 140px;
+  text-align: center;
+}
+
+.navBtn {
+  background: t.$bg-panel;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-muted;
+  border-radius: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: t.$text-primary;
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+}
+
+.todayBtn {
+  background: t.$bg-panel;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-muted;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    color: t.$text-primary;
+  }
+}
+
+.monthGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 24px;
+}
+
+.weekdayHeader {
+  text-align: center;
+  font-size: 11.5px;
+  color: t.$text-muted;
+  font-weight: 600;
+  padding: 6px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.monthDayCell {
+  background: t.$bg-panel;
+  border: 1px solid t.$border-subtle;
+  border-radius: 8px;
+  padding: 8px;
+  min-height: 70px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: t.$bg-elevated;
+  }
+
+  &.otherMonth {
+    opacity: 0.35;
+  }
+
+  &.isToday {
+    border-color: t.$accent-timer;
+    background: rgba(167, 139, 250, 0.05);
+  }
+
+  &.isSelected {
+    border-color: t.$accent-ai;
+    box-shadow: 0 0 0 1px t.$accent-ai;
+  }
+}
+
+.dayNumber {
+  font-size: 12px;
+  font-weight: 600;
+  color: t.$text-primary;
+}
+
+.dotContainer {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.badgeScheduled {
+  font-size: 10px;
+  background: rgba(96, 165, 250, 0.18);
+  color: #60a5fa;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: t.$font-mono;
+}
+
+.badgeDone {
+  font-size: 10px;
+  background: rgba(52, 211, 153, 0.18);
+  color: #34d399;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: t.$font-mono;
+}
+
+.detailPane {
+  background: t.$bg-panel;
+  border: 1px solid t.$border-subtle;
+  border-radius: 10px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.detailHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid t.$border-subtle;
+  padding-bottom: 10px;
+}
+
+.detailTitle {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: t.$text-primary;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.addTaskBtn {
+  background: t.$accent-ai;
+  color: #181225;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detailList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.taskDetailCard {
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  &:hover {
+    border-color: t.$accent-ai;
+  }
+}
+
+.taskDetailTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.taskDetailTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: t.$text-primary;
+}
+
+.taskDetailMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: t.$text-muted;
+  font-family: t.$font-mono;
+}
+

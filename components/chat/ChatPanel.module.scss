@@ -25,10 +25,34 @@
   gap: 10px;
 }
 
+.titleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
 .title {
   font-family: t.$font-display;
   font-size: 15px;
   font-weight: 500;
+}
+
+.modelSelect {
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-muted;
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 3px 6px;
+  cursor: pointer;
+  outline: none;
+  max-width: 170px;
+
+  &:hover, &:focus {
+    color: t.$text-primary;
+    border-color: rgba(255, 255, 255, 0.2);
+  }
 }
 
 .modeToggle {
@@ -106,12 +130,25 @@
 .approvalHead {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   color: t.$accent-ai;
   font-weight: 700;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.typeBadge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .approvalSummary {

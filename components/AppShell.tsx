@@ -16,6 +16,10 @@ import { TimerBar } from "@/components/timers/TimerBar";
 import { TabNav } from "@/components/board/TabNav";
 import { TaskColumn } from "@/components/board/TaskColumn";
 import { CalendarView } from "@/components/calendar/CalendarView";
+import { ScheduledTasksView } from "@/components/scheduled/ScheduledTasksView";
+import { AlarmDialog } from "@/components/scheduled/AlarmDialog";
+import { useScheduledTaskAlarms } from "@/lib/scheduled/useScheduledTaskAlarms";
+import { DashboardView } from "@/components/dashboard/DashboardView";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import styles from "./AppShell.module.scss";
 
@@ -24,6 +28,7 @@ export function AppShell() {
   const { view, setView, chatPanelOpen } = useUIStore();
   const updateTask = useUpdateTask();
   const startTimer = useStartTimer();
+  const { activeAlarm, handleStartInSlot, handleSnooze, handleDismiss } = useScheduledTaskAlarms();
 
   const mouseSensor = useSensor(MouseSensor, {
     activationConstraint: {
@@ -69,9 +74,25 @@ export function AppShell() {
         <TimerBar />
         <TabNav view={view} onChangeView={setView} />
         <div className={styles.main}>
-          {view === "calendar" ? <CalendarView /> : <TaskColumn view={view} />}
+          {view === "dashboard" ? (
+            <DashboardView />
+          ) : view === "calendar" ? (
+            <CalendarView />
+          ) : view === "scheduled" ? (
+            <ScheduledTasksView />
+          ) : (
+            <TaskColumn view={view} />
+          )}
           {chatPanelOpen && <ChatPanel />}
         </div>
+        {activeAlarm && (
+          <AlarmDialog
+            item={activeAlarm}
+            onStartInSlot={handleStartInSlot}
+            onSnooze={handleSnooze}
+            onDismiss={handleDismiss}
+          />
+        )}
       </div>
     </DndContext>
   );

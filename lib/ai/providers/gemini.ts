@@ -8,7 +8,15 @@ const MAX_TOOL_ITERATIONS = 6;
 
 // Update this if Google ships a newer default model — check
 // https://ai.google.dev/gemini-api/docs/models for the current list.
-const GEMINI_MODEL = "gemini-3.8-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+
+export const AVAILABLE_GEMINI_MODELS = [
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Workhorse Flagship)" },
+  { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash (Agentic Reasoning)" },
+  { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
+  { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
+  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro (Deep Reasoning)" },
+] as const;
 
 let client: GoogleGenerativeAI | null = null;
 function getClient(): GoogleGenerativeAI {
@@ -20,7 +28,7 @@ function getClient(): GoogleGenerativeAI {
  * Our tool registry already describes each tool's parameters as a JSON Schema
  * object with lowercase types ("object" / "string" / "number" / "boolean" / ...),
  * which is exactly what Gemini's FunctionDeclarationSchema (OpenAPI 3.0 subset)
- * expects — so no real conversion is needed beyond the TypeScript cast.
+ * expects.
  */
 function toGeminiTools(mode: "suggest" | "update"): FunctionDeclarationsTool[] {
   const tools = buildToolsForMode(mode);
@@ -29,44 +37,74 @@ function toGeminiTools(mode: "suggest" | "update"): FunctionDeclarationsTool[] {
       functionDeclarations: tools.map((t) => ({
         name: t.name,
         description: t.description,
-        // Our JSON Schema tool definitions use the same lowercase type strings
-        // Gemini's OpenAPI-subset schema expects — safe structurally, but the two
-        // types aren't nominally related, hence the through-unknown cast.
         parameters: t.input_schema as unknown as FunctionDeclarationSchema,
       })),
     },
   ];
 }
 
-export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResult> {
-  const { userId, mode, systemPrompt, history } = input;
+async function generateWithRetry(
+  model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>,
+  request: { contents: Content[] },
+  maxRetries = 3
+) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await model.generateContent(request);
+    } catch (err: unknown) {
+      attempt++;
+      const errObj = err as { status?: number; message?: string };
+      const isRateLimit =
+        errObj?.status === 429 ||
+        errObj?.message?.includes("429") ||
+        errObj?.message?.includes("RESOURCE_EXHAUSTED") ||
+        errObj?.status === 503;
+      if (isRateLimit && attempt <= maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 500);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
 
+export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResult> {
+  const { userId, mode, systemPrompt, history, model: requestedModel } = input;
+
+  const modelName = requestedModel || DEFAULT_GEMINI_MODEL;
   const model = getClient().getGenerativeModel({
-    model: GEMINI_MODEL,
+    model: modelName,
     tools: toGeminiTools(mode),
     systemInstruction: systemPrompt,
   });
 
-  // Gemini uses role "model" instead of "assistant"; the newest user message is
-  // sent separately via sendMessage() rather than living in `history`.
-  const priorTurns: Content[] = history.slice(0, -1).map((m) => ({
+  // Construct conversation turns explicitly using valid Gemini API roles ('user' and 'model').
+  // Never uses 'function' role which causes 400 Bad Request.
+  const contents: Content[] = history.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
   }));
-  const lastMessage = history[history.length - 1]?.content ?? "";
-
-  const chat = model.startChat({ history: priorTurns });
 
   const createdActionIds: string[] = [];
   let finalText = "";
-  let nextInput: string | Part[] = lastMessage;
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const result = await chat.sendMessage(nextInput);
-    const response = result.response;
-    finalText = response.text() || finalText;
+    const result = await generateWithRetry(model, { contents });
+    const candidate = result.response.candidates?.[0];
+    if (!candidate?.content) break;
 
-    const calls = response.functionCalls();
+    // Append model response to conversation history
+    contents.push(candidate.content);
+
+    // Capture text output if present
+    const responseText = result.response.text?.();
+    if (responseText) {
+      finalText = responseText;
+    }
+
+    const calls = result.response.functionCalls();
     if (!calls || calls.length === 0) break;
 
     const responseParts: Part[] = [];
@@ -80,7 +118,12 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
         },
       });
     }
-    nextInput = responseParts;
+
+    // Function results in Gemini API are passed in a turn with role 'user', NOT role 'function'
+    contents.push({
+      role: "user",
+      parts: responseParts,
+    });
   }
 
   return { replyText: finalText || "(no response)", createdActionIds };

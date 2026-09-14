@@ -20,6 +20,7 @@ export interface TaskDTO {
   scheduledDate: string | null;
   startDate: string | null;
   endDate: string | null;
+  scheduledTaskId?: string | null;
   order: number;
 }
 
@@ -37,6 +38,7 @@ export interface TimerSlotDTO {
 export interface ActiveTimersDTO {
   slots: Record<"1" | "2", TimerSlotDTO | null>;
   completedSecondsTodayBase: number;
+  totalUsageSeconds: number;
 }
 
 export interface AIActionDTO {
@@ -53,3 +55,70 @@ export interface ChatReplyDTO {
   reply: string;
   proposals: { id: string; type: string; summary: string; status: string }[];
 }
+
+export interface ScheduledTaskDTO {
+  id: string;
+  title: string;
+  description: string;
+  startTime: string;
+  durationMinutes: number;
+  timezone: string;
+  recurrenceRule: string;
+  recurrenceLabel: string;
+  reminderMinutes: number;
+  enabled: boolean;
+  syncToGoogleCalendar: boolean;
+  googleEventId: string | null;
+  createdAt: string;
+}
+
+export interface AnalyticsTimelinePointDTO {
+  date: string;
+  label: string;
+  actualHours: number;
+  plannedHours: number;
+  actualMinutes: number;
+  plannedMinutes: number;
+}
+
+export interface AnalyticsOverrunTaskDTO {
+  id: string;
+  title: string;
+  tabName: string;
+  status: string;
+  progressPercent: number;
+  estimateMinutes: number;
+  trackedMinutes: number;
+  overrunMinutes: number;
+  isOverrun: boolean;
+  percentOfEstimate: number;
+}
+
+export interface AnalyticsTabDistributionDTO {
+  name: string;
+  hours: number;
+  minutes: number;
+}
+
+export interface AnalyticsDataDTO {
+  metrics: {
+    todaySeconds: number;
+    thisWeekSeconds: number;
+    thisMonthSeconds: number;
+    allTimeSeconds: number;
+    activeTasksCount: number;
+    completedTasksCount: number;
+    upcomingTasksCount: number;
+    totalTasksCount: number;
+  };
+  timelines: {
+    "7d": AnalyticsTimelinePointDTO[];
+    "14d": AnalyticsTimelinePointDTO[];
+    "30d": AnalyticsTimelinePointDTO[];
+  };
+  overrunTasks: AnalyticsOverrunTaskDTO[];
+  tabDistribution: AnalyticsTabDistributionDTO[];
+  updatedAt: string;
+}
+
+

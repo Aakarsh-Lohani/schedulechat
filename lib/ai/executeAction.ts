@@ -67,6 +67,49 @@ export async function executeApprovedAction(
       return task ? JSON.parse(JSON.stringify(task)) : null;
     }
 
+    case "create-scheduled-task": {
+      const { ScheduledTask } = await import("@/lib/db/models/ScheduledTask");
+      const { createRecurringGoogleEvent } = await import("@/lib/calendar/googleCalendarService");
+
+      const googleEventId = await createRecurringGoogleEvent(userId, {
+        title: String(payload.title),
+        description: payload.description ? String(payload.description) : undefined,
+        startTime: String(payload.startTime),
+        durationMinutes: Number(payload.durationMinutes) || 30,
+        timezone: payload.timezone ? String(payload.timezone) : undefined,
+        recurrenceRule: String(payload.recurrenceRule),
+        reminderMinutes: Number(payload.reminderMinutes) || 10,
+      });
+
+      const doc = await ScheduledTask.create({
+        userId,
+        title: payload.title,
+        description: payload.description ?? "",
+        startTime: payload.startTime,
+        durationMinutes: payload.durationMinutes ?? 30,
+        timezone: payload.timezone ?? "Asia/Kolkata",
+        recurrenceRule: payload.recurrenceRule,
+        recurrenceLabel: payload.recurrenceLabel ?? "",
+        reminderMinutes: payload.reminderMinutes ?? 10,
+        syncToGoogleCalendar: true,
+        googleEventId,
+        enabled: true,
+      });
+      return JSON.parse(JSON.stringify(doc.toObject()));
+    }
+
+    case "delete-scheduled-task": {
+      const { ScheduledTask } = await import("@/lib/db/models/ScheduledTask");
+      const { deleteGoogleEvent } = await import("@/lib/calendar/googleCalendarService");
+
+      const existing = await ScheduledTask.findOne({ _id: payload.scheduledTaskId, userId }).lean();
+      if (existing?.googleEventId) {
+        await deleteGoogleEvent(userId, existing.googleEventId);
+      }
+      await ScheduledTask.deleteOne({ _id: payload.scheduledTaskId, userId });
+      return { deletedId: payload.scheduledTaskId };
+    }
+
     default:
       throw new Error(`Unknown action type: ${action.type}`);
   }
@@ -94,6 +137,29 @@ export async function undoExecutedAction(
     case "create-tab": {
       if (after?._id) {
         await Tab.findOneAndUpdate({ _id: after._id, userId }, { $set: { status: "archived" } });
+      }
+      return;
+    }
+    case "create-scheduled-task": {
+      if (after?._id) {
+        const { ScheduledTask } = await import("@/lib/db/models/ScheduledTask");
+        const { deleteGoogleEvent } = await import("@/lib/calendar/googleCalendarService");
+        if (after.googleEventId) {
+          await deleteGoogleEvent(userId, String(after.googleEventId));
+        }
+        // Soft-delete: disable instead of hard-deleting, per Engineering Rule 3
+        // ("No task is ever hard-deleted by the AI")
+        await ScheduledTask.findOneAndUpdate(
+          { _id: after._id, userId },
+          { $set: { enabled: false, googleEventId: null } }
+        );
+      }
+      return;
+    }
+    case "delete-scheduled-task": {
+      if (before?._id) {
+        const { ScheduledTask } = await import("@/lib/db/models/ScheduledTask");
+        await ScheduledTask.create(before);
       }
       return;
     }

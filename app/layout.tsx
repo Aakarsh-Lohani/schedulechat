@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.scss";
 import { AuthProvider } from "@/lib/authProvider";
 import { QueryProvider } from "@/lib/queryClient";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "ScheduleChat",
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <AuthProvider>
           <QueryProvider>{children}</QueryProvider>
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );

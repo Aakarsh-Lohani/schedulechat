@@ -20,6 +20,7 @@ const TaskSchema = new Schema(
     scheduledDate: { type: Date, default: null },
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
+    scheduledTaskId: { type: Schema.Types.ObjectId, ref: "ScheduledTask", default: null },
 
     order: { type: Number, default: 0 },
   },
@@ -28,6 +29,7 @@ const TaskSchema = new Schema(
 
 TaskSchema.index({ userId: 1, tabId: 1, order: 1 });
 TaskSchema.index({ userId: 1, scheduledDate: 1 });
+TaskSchema.index({ userId: 1, scheduledTaskId: 1, scheduledDate: 1 });
 TaskSchema.index({ userId: 1, startDate: 1, endDate: 1 });
 
 export type TaskDoc = InferSchemaType<typeof TaskSchema> & { _id: Schema.Types.ObjectId };
