@@ -21,6 +21,17 @@ export function useCreateTab() {
   });
 }
 
+export function useUpdateTab() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...fields }: { id: string; name?: string; order?: number }) =>
+      apiFetch<{ tab: TabDTO }>(`/api/tabs/${id}`, { method: "PATCH", body: JSON.stringify(fields) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tabs"] });
+    },
+  });
+}
+
 export function useDeleteTab() {
   const qc = useQueryClient();
   return useMutation({

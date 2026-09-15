@@ -19,6 +19,16 @@
   &:hover .deleteTabBtn {
     opacity: 1;
   }
+
+  &.dragOver {
+    outline: 2px dashed t.$accent-ai;
+    border-radius: 6px;
+    background: t.$bg-elevated;
+  }
+
+  &.isDragging {
+    opacity: 0.4;
+  }
 }
 
 .tab {
@@ -31,6 +41,9 @@
   cursor: pointer;
   white-space: nowrap;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 
   &.active {
     color: t.$text-primary;
@@ -41,6 +54,17 @@
     background: t.$accent-ai-dim;
     border-radius: 6px 6px 0 0;
   }
+}
+
+.primaryBadge {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: t.$text-muted;
+  border: 1px solid t.$border-subtle;
 }
 
 .deleteTabBtn {
