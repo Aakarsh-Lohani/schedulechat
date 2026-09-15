@@ -53,10 +53,17 @@ export async function GET(req: Request) {
     status: { $in: ["completed", "running"] },
   }).lean();
 
-  // Fetch tasks and tabs
-  const tasks = await Task.find({ userId, status: { $ne: "archived" } }).lean();
-  const tabs = await Tab.find({ userId }).lean();
-  const tabNameMap = new Map(tabs.map((t) => [String(t._id), t.name]));
+  // Fetch active tabs and filter out tasks from archived tabs or with archived status
+  const activeTabs = await Tab.find({ userId, status: "active" }).lean();
+  const activeTabIds = new Set(activeTabs.map((t) => String(t._id)));
+  const tabNameMap = new Map(activeTabs.map((t) => [String(t._id), t.name]));
+
+  const candidateTasks = await Task.find({
+    userId,
+    status: { $in: ["not-started", "in-progress", "done"] },
+  }).lean();
+
+  const tasks = candidateTasks.filter((t) => !t.tabId || activeTabIds.has(String(t.tabId)));
 
   let todaySeconds = 0;
   let thisWeekSeconds = 0;

@@ -123,14 +123,34 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
           </label>
         </div>
 
-        <label className={styles.field}>
-          Scheduled date
+        <div className={styles.field}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <span>Scheduled date (optional)</span>
+            {scheduledDate && (
+              <button
+                type="button"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#a1a1aa",
+                  fontSize: "11px",
+                  cursor: "pointer",
+                  padding: 0,
+                  textDecoration: "underline",
+                }}
+                onClick={() => setScheduledDate("")}
+                title="Remove date to keep in Upcoming / To Do"
+              >
+                Clear date
+              </button>
+            )}
+          </div>
           <input
             type="datetime-local"
             value={scheduledDate}
             onChange={(e) => setScheduledDate(e.target.value)}
           />
-        </label>
+        </div>
 
         <label className={styles.field}>
           Notes

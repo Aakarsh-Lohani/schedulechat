@@ -1,13 +1,20 @@
 @use "../../styles/tokens" as t;
-@use "../../styles/mixins" as m;
 
 .overlay {
-  @include m.modal-backdrop;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 1200;
+  backdrop-filter: blur(4px);
 }
 
 .popup {
-  @include m.modal-surface;
+  background: t.$bg-panel;
+  border-radius: t.$radius-md;
+  padding: 20px;
   width: min(520px, 94vw);
   border: 1px solid rgba(240, 96, 90, 0.4);
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5), 0 0 20px rgba(240, 96, 90, 0.15);

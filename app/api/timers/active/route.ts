@@ -20,7 +20,7 @@ export async function GET() {
 
   const [activeSessions, allCompletedSessions] = await Promise.all([
     TimerSession.find({ userId, status: { $in: ["countdown", "running"] } })
-      .populate("taskId", "title defaultTimerMinutes")
+      .populate("taskId", "title defaultTimerMinutes scheduledTaskId")
       .lean(),
     TimerSession.find({ userId, status: "completed" })
       .select("contributedSeconds actualEndedAt startedAt")
@@ -46,11 +46,12 @@ export async function GET() {
       continue;
     }
 
-    const populatedTask = s.taskId as unknown as { _id: unknown; title?: string } | null;
+    const populatedTask = s.taskId as unknown as { _id: unknown; title?: string; scheduledTaskId?: unknown } | null;
     slots[slotNum] = {
       id: String(s._id),
       taskId: String(populatedTask?._id ?? s.taskId),
       taskTitle: populatedTask?.title ?? "Task",
+      isScheduledTask: Boolean(populatedTask?.scheduledTaskId),
       status: s.status,
       startedAt: s.startedAt,
       countdownEndsAt: s.countdownEndsAt,

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useDndMonitor, useDroppable, type DragEndEvent } from "@dnd-kit/core";
-import { Plus, Play, Calendar, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Play, Calendar, CheckCircle2, ChevronDown, ChevronRight, RotateCw } from "lucide-react";
 import { useTabs, useTasks, useUpdateTask } from "@/lib/api/hooks";
 import { TaskCard } from "./TaskCard";
 import { TaskModal } from "./TaskModal";
@@ -23,7 +23,7 @@ export function TaskColumn({ view }: { view: BoardView }) {
   const { data: tabs } = useTabs();
   const isToday = view === "today";
   const filter = isToday ? { scheduledToday: true } : { tabId: view };
-  const { data: tasks, isLoading } = useTasks(filter, view);
+  const { data: tasks, isLoading, isFetching, refetch } = useTasks(filter, view);
   const updateTask = useUpdateTask();
   const [editing, setEditing] = useState<TaskDTO | null>(null);
   const [creating, setCreating] = useState(false);
@@ -104,14 +104,25 @@ export function TaskColumn({ view }: { view: BoardView }) {
     <div className={styles.board}>
       <h2 className={styles.heading}>
         {tabName}
-        <button
-          type="button"
-          className={styles.newBtn}
-          onClick={() => setCreating(true)}
-          style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}
-        >
-          <Plus size={14} /> New task
-        </button>
+        <div className={styles.headingActions}>
+          <button
+            type="button"
+            className={styles.refreshBtn}
+            onClick={() => refetch()}
+            disabled={isFetching}
+            title="Refresh tasks"
+          >
+            <RotateCw size={13} className={isFetching ? styles.spin : ""} />
+          </button>
+          <button
+            type="button"
+            className={styles.newBtn}
+            onClick={() => setCreating(true)}
+            style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}
+          >
+            <Plus size={14} /> New task
+          </button>
+        </div>
       </h2>
       <p className={styles.sub}>
         {isToday
@@ -120,7 +131,10 @@ export function TaskColumn({ view }: { view: BoardView }) {
       </p>
 
       {isLoading ? (
-        <p className={styles.empty}>Loading…</p>
+        <div className={styles.loadingContainer}>
+          <div className={styles.spinner} />
+          <span>Loading tasks…</span>
+        </div>
       ) : tasks && tasks.length > 0 ? (
         <div className={styles.sections}>
           {/* 1. Active Tasks */}

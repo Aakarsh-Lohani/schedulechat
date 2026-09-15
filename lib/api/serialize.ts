@@ -1,6 +1,6 @@
 interface LeanTaskLike {
   _id: unknown;
-  tabId: unknown;
+  tabId?: unknown;
   title: string;
   description?: string;
   source: string;
@@ -31,7 +31,7 @@ interface LeanTimerSessionLike {
 export function serializeTask(t: LeanTaskLike) {
   return {
     id: String(t._id),
-    tabId: String(t.tabId),
+    tabId: t.tabId ? String(t.tabId) : "",
     title: t.title,
     description: t.description,
     source: t.source,

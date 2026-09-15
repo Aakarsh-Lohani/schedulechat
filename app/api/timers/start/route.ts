@@ -50,6 +50,13 @@ export async function POST(req: Request) {
     status: "countdown",
   });
 
+  // Automatically update task status to active (in-progress) when timer starts
+  if (task.status === "not-started") {
+    task.status = "in-progress";
+    await task.save();
+    emit(userId, { type: "task-updated" });
+  }
+
   emit(userId, { type: "timer-changed" });
 
   return NextResponse.json({ session: serializeSession(session.toObject()) }, { status: 201 });

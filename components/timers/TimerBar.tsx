@@ -103,6 +103,13 @@ function SlotView({
   const remainingRunning = plannedTotal - workElapsedSeconds;
   const isOver = remainingRunning <= 0;
 
+  const [scheduledApproved, setScheduledApproved] = useState(false);
+
+  // Reset approval on session change
+  useEffect(() => {
+    setScheduledApproved(false);
+  }, [sessionId]);
+
   return (
     <div ref={setNodeRef} className={`${styles.slot} ${isOver ? styles.over : ""}`}>
       <div className={styles.ring} />
@@ -114,6 +121,27 @@ function SlotView({
         </span>
       </div>
       <div className={styles.actions}>
+        {session.isScheduledTask && !scheduledApproved && (
+          <div className={styles.scheduledApproval}>
+            <span className={styles.approvalPrompt}>Followed?</span>
+            <button
+              type="button"
+              className={`${styles.miniBtn} ${styles.approveBtn}`}
+              onClick={() => setScheduledApproved(true)}
+              title="Yes, count this time"
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              className={`${styles.miniBtn} ${styles.rejectBtn}`}
+              onClick={() => stopTimer.mutate({ id: session.id, followed: false })}
+              title="No, mark not followed and discard time"
+            >
+              No
+            </button>
+          </div>
+        )}
         {isOver && (
           <button className={styles.miniBtn} onClick={() => extendTimer.mutate({ id: session.id, seconds: 600 })}>
             +10m

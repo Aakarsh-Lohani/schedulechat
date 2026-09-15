@@ -167,7 +167,11 @@ export function useExtendTimer() {
 export function useStopTimer() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiFetch(`/api/timers/${id}/stop`, { method: "POST" }),
+    mutationFn: (arg: string | { id: string; followed?: boolean; discardTime?: boolean }) => {
+      const id = typeof arg === "string" ? arg : arg.id;
+      const body = typeof arg === "object" ? JSON.stringify({ followed: arg.followed, discardTime: arg.discardTime }) : undefined;
+      return apiFetch(`/api/timers/${id}/stop`, { method: "POST", body });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["timers", "active"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });

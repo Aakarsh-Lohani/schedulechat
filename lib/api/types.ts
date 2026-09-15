@@ -28,6 +28,7 @@ export interface TimerSlotDTO {
   id: string;
   taskId: string;
   taskTitle: string;
+  isScheduledTask?: boolean;
   status: "countdown" | "running";
   startedAt: string;
   countdownEndsAt: string | null;

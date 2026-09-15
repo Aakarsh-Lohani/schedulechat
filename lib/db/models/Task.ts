@@ -3,7 +3,7 @@ import { Schema, model, models, type InferSchemaType, type Model } from "mongoos
 const TaskSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    tabId: { type: Schema.Types.ObjectId, ref: "Tab", required: true, index: true },
+    tabId: { type: Schema.Types.ObjectId, ref: "Tab", index: true, default: null },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
 

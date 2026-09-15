@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/connect";
 import { getCurrentUserId } from "@/lib/session";
 import { ScheduledTask } from "@/lib/db/models/ScheduledTask";
@@ -39,12 +39,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ materializedCount: 0, tasks: [] });
   }
 
-  // Get default tab
-  const defaultTab = await Tab.findOne({ userId }).sort({ isSystemDefault: -1, order: 1 });
-  if (!defaultTab) {
-    return NextResponse.json({ error: "No tab found", code: "NO_TAB" }, { status: 400 });
-  }
-
   const materializedTasks = [];
 
   for (const st of scheduledTasks) {
@@ -68,7 +62,7 @@ export async function POST(req: Request) {
     if (!existing) {
       const doc = await Task.create({
         userId,
-        tabId: st.tabId || defaultTab._id,
+        tabId: st.tabId ?? null,
         title: st.title,
         description: st.description || "",
         source: "manual",
