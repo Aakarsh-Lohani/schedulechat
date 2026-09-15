@@ -11,6 +11,7 @@ import {
   useConversations,
   useCreateConversation,
   useDeleteConversation,
+  useUpdateConversationTitle,
   useRejectAction,
   useSendChat,
   useUndoAction,
@@ -52,8 +53,11 @@ export function ChatPanel() {
   const { data: conversations } = useConversations();
   const createConvo = useCreateConversation();
   const deleteConvo = useDeleteConversation();
+  const updateConvoTitle = useUpdateConversationTitle();
 
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState("");
 
   // Sync active conversation when conversations load or when none is selected
   useEffect(() => {
@@ -112,6 +116,23 @@ export function ChatPanel() {
     }
   }
 
+  const activeConvo = conversations?.find((c) => c.id === activeConversationId);
+
+  function startEditingTitle() {
+    if (!activeConvo) return;
+    setEditTitleValue(activeConvo.title);
+    setIsEditingTitle(true);
+  }
+
+  async function handleSaveTitle() {
+    if (!activeConversationId || !editTitleValue.trim()) {
+      setIsEditingTitle(false);
+      return;
+    }
+    await updateConvoTitle.mutateAsync({ id: activeConversationId, title: editTitleValue.trim() });
+    setIsEditingTitle(false);
+  }
+
   async function handleSend() {
     const text = input.trim();
     if (!text || sendChat.isPending) return;
@@ -154,47 +175,82 @@ export function ChatPanel() {
 
       <div className={styles.head}>
         <div className={styles.convoRow}>
-          <div className={styles.convoSelector}>
-            <MessageSquare size={13} className={styles.convoIcon} />
-            <select
-              className={styles.convoSelect}
-              value={activeConversationId ?? ""}
-              onChange={(e) => {
-                setActiveConversationId(e.target.value || null);
-                setNewMessages([]);
-              }}
-              title="Select conversation"
-            >
-              {conversations && conversations.length > 0 ? (
-                conversations.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}
-                  </option>
-                ))
-              ) : (
-                <option value="">Current Thread</option>
+          {isEditingTitle ? (
+            <div className={styles.titleEditRow}>
+              <input
+                type="text"
+                className={styles.titleEditInput}
+                value={editTitleValue}
+                onChange={(e) => setEditTitleValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveTitle();
+                  if (e.key === "Escape") setIsEditingTitle(false);
+                }}
+                autoFocus
+              />
+              <button type="button" className={styles.iconBtn} onClick={handleSaveTitle} title="Save title">
+                <Check size={12} />
+              </button>
+              <button type="button" className={styles.iconBtn} onClick={() => setIsEditingTitle(false)} title="Cancel">
+                <X size={12} />
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className={styles.convoSelector}>
+                <MessageSquare size={13} className={styles.convoIcon} />
+                <select
+                  className={styles.convoSelect}
+                  value={activeConversationId ?? ""}
+                  onChange={(e) => {
+                    setActiveConversationId(e.target.value || null);
+                    setNewMessages([]);
+                  }}
+                  title="Select conversation"
+                >
+                  {conversations && conversations.length > 0 ? (
+                    conversations.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Current Thread</option>
+                  )}
+                </select>
+              </div>
+
+              {activeConversationId && (
+                <button
+                  type="button"
+                  className={styles.editChatBtn}
+                  onClick={startEditingTitle}
+                  title="Rename conversation"
+                >
+                  <Pencil size={13} />
+                </button>
               )}
-            </select>
-          </div>
 
-          <button
-            type="button"
-            className={styles.newChatBtn}
-            onClick={handleNewChat}
-            title="Start new conversation"
-          >
-            <Plus size={12} /> New
-          </button>
+              <button
+                type="button"
+                className={styles.newChatBtn}
+                onClick={handleNewChat}
+                title="Start new conversation"
+              >
+                <Plus size={12} /> New
+              </button>
 
-          {activeConversationId && (
-            <button
-              type="button"
-              className={styles.delChatBtn}
-              onClick={() => handleDeleteConvo(activeConversationId)}
-              title="Delete conversation"
-            >
-              <Trash2 size={13} />
-            </button>
+              {activeConversationId && (
+                <button
+                  type="button"
+                  className={styles.delChatBtn}
+                  onClick={() => handleDeleteConvo(activeConversationId)}
+                  title="Delete conversation"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

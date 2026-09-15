@@ -1,0 +1,246 @@
+@use "../../styles/tokens" as t;
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  border-radius: t.$radius-sm;
+  padding: 5px 9px;
+  color: t.$text-muted;
+
+  input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: t.$text-primary;
+    font-size: 12px;
+    width: 160px;
+
+    &::placeholder {
+      color: t.$text-muted;
+    }
+  }
+}
+
+.filterBtn {
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-muted;
+  border-radius: t.$radius-sm;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s ease;
+
+  &:hover {
+    color: t.$text-primary;
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  &.active {
+    background: rgba(167, 139, 250, 0.15);
+    color: #c4b5fd;
+    border-color: rgba(167, 139, 250, 0.4);
+    font-weight: 600;
+  }
+}
+
+.labelSelect {
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-primary;
+  border-radius: t.$radius-sm;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  outline: none;
+  cursor: pointer;
+  color-scheme: dark;
+
+  option {
+    background: #1b1f26;
+    color: #e7eaee;
+  }
+}
+
+.countLabel {
+  font-size: 11px;
+  color: t.$text-muted;
+  font-family: t.$font-mono;
+}
+
+.tableWrapper {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid t.$border-subtle;
+  border-radius: t.$radius-sm;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+
+  th {
+    background: rgba(255, 255, 255, 0.03);
+    color: t.$text-muted;
+    font-weight: 600;
+    padding: 9px 12px;
+    border-bottom: 1px solid t.$border-subtle;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    vertical-align: middle;
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+  }
+}
+
+.taskCell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.taskTitle {
+  font-weight: 500;
+  color: t.$text-primary;
+}
+
+.labelsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.labelChip {
+  font-size: 10px;
+  background: rgba(167, 139, 250, 0.12);
+  color: #c4b5fd;
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
+.statusBadge {
+  display: inline-block;
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: capitalize;
+
+  &.done {
+    background: rgba(74, 222, 128, 0.12);
+    color: #4ade80;
+  }
+
+  &.inProgress {
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+  }
+
+  &.notStarted {
+    background: rgba(255, 255, 255, 0.06);
+    color: t.$text-muted;
+  }
+}
+
+.tabBadge {
+  display: inline-block;
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: t.$text-muted;
+  white-space: nowrap;
+}
+
+.timeCell {
+  font-family: t.$font-mono;
+  font-size: 11.5px;
+  color: t.$text-primary;
+  white-space: nowrap;
+}
+
+.budgetCell {
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.progressBar {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+
+  &.normal {
+    background: t.$accent-timer;
+  }
+
+  &.overrun {
+    background: t.$status-orange;
+  }
+}
+
+.budgetBadge {
+  font-size: 10px;
+  font-family: t.$font-mono;
+
+  &.overrun {
+    color: t.$status-orange;
+  }
+
+  &.within {
+    color: t.$status-green;
+  }
+}
+
+.emptyState {
+  padding: 30px;
+  text-align: center;
+  color: t.$text-muted;
+  font-size: 13px;
+}

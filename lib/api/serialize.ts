@@ -13,6 +13,7 @@ interface LeanTaskLike {
   scheduledDate?: Date | null;
   startDate?: Date | null;
   endDate?: Date | null;
+  labels?: string[];
   order: number;
 }
 
@@ -44,6 +45,7 @@ export function serializeTask(t: LeanTaskLike) {
     scheduledDate: t.scheduledDate,
     startDate: t.startDate,
     endDate: t.endDate,
+    labels: Array.isArray(t.labels) ? t.labels : [],
     order: t.order,
   };
 }

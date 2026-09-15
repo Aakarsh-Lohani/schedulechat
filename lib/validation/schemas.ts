@@ -22,6 +22,7 @@ export const createTaskSchema = z.object({
   startDate: z.string().datetime().nullable().optional(),
   endDate: z.string().datetime().nullable().optional(),
   source: z.enum(["manual", "ai-suggested"]).default("manual"),
+  labels: z.array(z.string().trim().min(1).max(50)).optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -35,6 +36,7 @@ export const updateTaskSchema = z.object({
   scheduledDate: z.string().datetime().nullable().optional(),
   startDate: z.string().datetime().nullable().optional(),
   endDate: z.string().datetime().nullable().optional(),
+  labels: z.array(z.string().trim().min(1).max(50)).optional(),
   order: z.number().optional(),
   aiAccepted: z.boolean().optional(),
 });

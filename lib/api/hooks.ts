@@ -255,6 +255,20 @@ export function useDeleteConversation() {
   });
 }
 
+export function useUpdateConversationTitle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      apiFetch<{ conversation: ConversationDTO }>(`/api/chat/conversations/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
 export function useChatHistory(conversationId?: string | null) {
   return useQuery({
     queryKey: ["chat-history", conversationId ?? "default"],

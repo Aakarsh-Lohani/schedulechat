@@ -37,6 +37,8 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
   const [scheduledDate, setScheduledDate] = useState(
     toDatetimeLocalValue(task?.scheduledDate ?? (task ? undefined : defaultScheduledDate))
   );
+  const [labels, setLabels] = useState<string[]>(task?.labels ?? []);
+  const [labelInput, setLabelInput] = useState("");
 
   async function handleSave() {
     if (!title.trim() || !tabId) return;
@@ -53,6 +55,7 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
         defaultTimerMinutes,
         description,
         scheduledDate: scheduledDateISO,
+        labels,
       });
     } else {
       await createTask.mutateAsync({
@@ -63,6 +66,7 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
         defaultTimerMinutes,
         description,
         scheduledDate: scheduledDateISO,
+        labels,
       });
     }
     onClose();
@@ -150,6 +154,58 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
             value={scheduledDate}
             onChange={(e) => setScheduledDate(e.target.value)}
           />
+        </div>
+
+        <div className={styles.field}>
+          <span>Labels</span>
+          {labels.length > 0 && (
+            <div className={styles.labelChips}>
+              {labels.map((lbl) => (
+                <span key={lbl} className={styles.modalLabelChip}>
+                  {lbl}
+                  <button
+                    type="button"
+                    className={styles.removeLabelBtn}
+                    onClick={() => setLabels(labels.filter((l) => l !== lbl))}
+                    title="Remove label"
+                  >
+                    &times;
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className={styles.addLabelRow}>
+            <input
+              type="text"
+              placeholder="Add a label and press Enter..."
+              value={labelInput}
+              onChange={(e) => setLabelInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const val = labelInput.trim();
+                  if (val && !labels.includes(val)) {
+                    setLabels([...labels, val]);
+                    setLabelInput("");
+                  }
+                }
+              }}
+            />
+            <button
+              type="button"
+              className={styles.addLabelBtn}
+              onClick={() => {
+                const val = labelInput.trim();
+                if (val && !labels.includes(val)) {
+                  setLabels([...labels, val]);
+                  setLabelInput("");
+                }
+              }}
+            >
+              Add
+            </button>
+          </div>
         </div>
 
         <label className={styles.field}>

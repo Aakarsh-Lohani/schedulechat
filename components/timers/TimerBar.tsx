@@ -72,6 +72,13 @@ function SlotView({
     }
   }, [sessionId, isCountdown]);
 
+  const [scheduledApproved, setScheduledApproved] = useState(false);
+
+  // Reset approval on session change
+  useEffect(() => {
+    setScheduledApproved(false);
+  }, [sessionId]);
+
   if (!session) {
     return (
       <div ref={setNodeRef} className={`${styles.slot} ${isDropTarget ? styles.dropTarget : ""}`}>
@@ -102,13 +109,6 @@ function SlotView({
   const plannedTotal = session.plannedDurationSeconds + session.extendedBySeconds;
   const remainingRunning = plannedTotal - workElapsedSeconds;
   const isOver = remainingRunning <= 0;
-
-  const [scheduledApproved, setScheduledApproved] = useState(false);
-
-  // Reset approval on session change
-  useEffect(() => {
-    setScheduledApproved(false);
-  }, [sessionId]);
 
   return (
     <div ref={setNodeRef} className={`${styles.slot} ${isOver ? styles.over : ""}`}>

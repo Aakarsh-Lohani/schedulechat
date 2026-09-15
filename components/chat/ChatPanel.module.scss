@@ -78,6 +78,50 @@
   outline: none;
   cursor: pointer;
   text-overflow: ellipsis;
+  color-scheme: dark;
+
+  option {
+    background: #1b1f26;
+    color: #e7eaee;
+    padding: 6px;
+  }
+}
+
+.titleEditRow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.titleEditInput {
+  flex: 1;
+  min-width: 0;
+  background: t.$bg-elevated;
+  border: 1px solid t.$accent-ai;
+  border-radius: 4px;
+  color: t.$text-primary;
+  font-size: 12px;
+  padding: 3px 6px;
+  outline: none;
+}
+
+.iconBtn {
+  background: none;
+  border: none;
+  color: t.$text-muted;
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: t.$text-primary;
+    background: t.$bg-elevated;
+  }
 }
 
 .newChatBtn {
@@ -101,6 +145,7 @@
   }
 }
 
+.editChatBtn,
 .delChatBtn {
   background: none;
   border: none;

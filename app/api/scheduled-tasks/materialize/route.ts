@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     if (!existing) {
       const doc = await Task.create({
         userId,
-        tabId: st.tabId ?? null,
+        tabId: null,
         title: st.title,
         description: st.description || "",
         source: "manual",

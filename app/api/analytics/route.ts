@@ -185,6 +185,68 @@ export async function GET(req: Request) {
     minutes: Math.round(seconds / 60),
   }));
 
+  // Label distribution
+  const labelMap = new Map<string, number>();
+  for (const t of tasks) {
+    const sec = t.totalTrackedSeconds || 0;
+    const taskLabels = Array.isArray(t.labels) && t.labels.length > 0 ? t.labels : ["Unlabeled"];
+    for (const lbl of taskLabels) {
+      labelMap.set(lbl, (labelMap.get(lbl) || 0) + sec);
+    }
+  }
+
+  const labelDistribution = Array.from(labelMap.entries())
+    .map(([name, seconds]) => ({
+      name,
+      hours: Number((seconds / 3600).toFixed(1)),
+      minutes: Math.round(seconds / 60),
+    }))
+    .sort((a, b) => b.minutes - a.minutes);
+
+  // Hourly activity (0-23) based on session start times aligned to client timezone
+  const hourlyActivity = Array.from({ length: 24 }, (_, h) => {
+    const ampm = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
+    return {
+      hour: h,
+      label: ampm,
+      minutes: 0,
+      sessionCount: 0,
+    };
+  });
+
+  for (const s of sessions) {
+    const started = new Date(s.startedAt);
+    const localStart = new Date(started.getTime() - tzOffsetMinutes * 60 * 1000);
+    const hour = localStart.getUTCHours();
+    const durSec =
+      s.status === "completed"
+        ? s.contributedSeconds || s.plannedDurationSeconds
+        : Math.min(s.plannedDurationSeconds, Math.floor((Date.now() - started.getTime()) / 1000));
+    if (hourlyActivity[hour]) {
+      hourlyActivity[hour].minutes += Math.round(durSec / 60);
+      hourlyActivity[hour].sessionCount += 1;
+    }
+  }
+
+  // All Tasks overview
+  const allTasks = tasks.map((t) => {
+    const trackedSec = t.totalTrackedSeconds || 0;
+    const { isOverrun, overrunMinutes, percentOfEstimate } = calculateOverrun(t.estimateMinutes, trackedSec);
+    return {
+      id: String(t._id),
+      title: t.title,
+      tabName: tabNameMap.get(String(t.tabId)) || "General",
+      status: t.status,
+      progressPercent: t.progressPercent,
+      estimateMinutes: t.estimateMinutes,
+      trackedMinutes: Math.round(trackedSec / 60),
+      overrunMinutes,
+      isOverrun,
+      percentOfEstimate,
+      labels: Array.isArray(t.labels) ? t.labels : [],
+    };
+  });
+
   const activeTasksCount = tasks.filter((t) => t.status === "in-progress").length;
   const completedTasksCount = tasks.filter((t) => t.status === "done").length;
   const upcomingTasksCount = tasks.filter((t) => t.status === "not-started").length;
@@ -206,7 +268,10 @@ export async function GET(req: Request) {
       "30d": timeline30d,
     },
     overrunTasks: overrunTasks.slice(0, 10),
+    allTasks,
     tabDistribution,
+    labelDistribution,
+    hourlyActivity,
     updatedAt: new Date().toISOString(),
   });
 }

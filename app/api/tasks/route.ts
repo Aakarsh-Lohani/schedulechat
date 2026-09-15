@@ -24,8 +24,22 @@ export async function GET(req: Request) {
   const to = url.searchParams.get("to");
 
   await connectDB();
+
+  // Ensure any scheduled tasks do not have a tabId pointing to a project tab
+  await Task.updateMany(
+    {
+      userId,
+      $or: [{ scheduledTaskId: { $ne: null } }, { title: { $regex: /^Daily Standup/i } }],
+      tabId: { $ne: null },
+    },
+    { $set: { tabId: null } }
+  );
+
   const query: Record<string, unknown> = { userId, status: { $ne: "archived" } };
-  if (tabId) query.tabId = tabId;
+  if (tabId) {
+    query.tabId = tabId;
+    query.scheduledTaskId = null;
+  }
   if (scheduledToday) {
     const tzOffsetParam = url.searchParams.get("tzOffset");
     let startOfToday: Date;

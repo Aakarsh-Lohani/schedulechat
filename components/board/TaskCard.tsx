@@ -78,6 +78,16 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
         </span>
       </div>
 
+      {task.labels && task.labels.length > 0 && (
+        <div className={styles.labelRow}>
+          {task.labels.map((lbl) => (
+            <span key={lbl} className={styles.labelChip}>
+              {lbl}
+            </span>
+          ))}
+        </div>
+      )}
+
       {task.source === "ai-suggested" && !task.aiAccepted && (
         <button
           type="button"

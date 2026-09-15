@@ -21,6 +21,7 @@ export interface TaskDTO {
   startDate: string | null;
   endDate: string | null;
   scheduledTaskId?: string | null;
+  labels: string[];
   order: number;
 }
 
@@ -110,6 +111,33 @@ export interface AnalyticsTabDistributionDTO {
   minutes: number;
 }
 
+export interface AnalyticsLabelDistributionDTO {
+  name: string;
+  hours: number;
+  minutes: number;
+}
+
+export interface AnalyticsHourlyActivityDTO {
+  hour: number;
+  label: string;
+  minutes: number;
+  sessionCount: number;
+}
+
+export interface AnalyticsAllTaskDTO {
+  id: string;
+  title: string;
+  tabName: string;
+  status: string;
+  progressPercent: number;
+  estimateMinutes: number;
+  trackedMinutes: number;
+  overrunMinutes: number;
+  isOverrun: boolean;
+  percentOfEstimate: number;
+  labels: string[];
+}
+
 export interface AnalyticsDataDTO {
   metrics: {
     todaySeconds: number;
@@ -127,7 +155,10 @@ export interface AnalyticsDataDTO {
     "30d": AnalyticsTimelinePointDTO[];
   };
   overrunTasks: AnalyticsOverrunTaskDTO[];
+  allTasks: AnalyticsAllTaskDTO[];
   tabDistribution: AnalyticsTabDistributionDTO[];
+  labelDistribution: AnalyticsLabelDistributionDTO[];
+  hourlyActivity: AnalyticsHourlyActivityDTO[];
   updatedAt: string;
 }
 

@@ -21,6 +21,7 @@ const TaskSchema = new Schema(
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
     scheduledTaskId: { type: Schema.Types.ObjectId, ref: "ScheduledTask", default: null },
+    labels: { type: [String], default: [] },
 
     order: { type: Number, default: 0 },
   },
