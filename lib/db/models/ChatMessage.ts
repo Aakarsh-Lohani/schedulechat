@@ -3,6 +3,7 @@ import { Schema, model, models, type InferSchemaType, type Model } from "mongoos
 const ChatMessageSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    conversationId: { type: Schema.Types.ObjectId, ref: "Conversation", index: true },
     role: { type: String, enum: ["user", "assistant", "system-note"], required: true },
     content: { type: String, required: true },
     mode: { type: String, enum: ["suggest", "update"], required: true },
@@ -12,6 +13,7 @@ const ChatMessageSchema = new Schema(
 );
 
 ChatMessageSchema.index({ userId: 1, createdAt: 1 });
+ChatMessageSchema.index({ conversationId: 1, createdAt: 1 });
 
 export type ChatMessageDoc = InferSchemaType<typeof ChatMessageSchema> & { _id: Schema.Types.ObjectId };
 

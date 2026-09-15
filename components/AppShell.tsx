@@ -75,15 +75,17 @@ export function AppShell() {
         <TimerBar />
         <TabNav view={view} onChangeView={setView} />
         <div className={styles.main}>
-          {view === "dashboard" ? (
-            <DashboardView />
-          ) : view === "calendar" ? (
-            <CalendarView />
-          ) : view === "scheduled" ? (
-            <ScheduledTasksView />
-          ) : (
-            <TaskColumn view={view} />
-          )}
+          <div className={styles.viewContainer}>
+            {view === "dashboard" ? (
+              <DashboardView />
+            ) : view === "calendar" ? (
+              <CalendarView />
+            ) : view === "scheduled" ? (
+              <ScheduledTasksView />
+            ) : (
+              <TaskColumn view={view} />
+            )}
+          </div>
           {chatPanelOpen && <ChatPanel />}
         </div>
         {activeAlarm && (

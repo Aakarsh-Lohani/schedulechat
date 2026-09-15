@@ -6,6 +6,7 @@ import { buildSystemPrompt } from "@/lib/ai/systemPrompt";
 import { buildContextSnapshot } from "@/lib/ai/context";
 import { runChatTurn } from "@/lib/ai";
 import { ChatMessage } from "@/lib/db/models/ChatMessage";
+import { Conversation } from "@/lib/db/models/Conversation";
 import { AIAction } from "@/lib/db/models/AIAction";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { logger } from "@/lib/logger";
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request", code: "VALIDATION_ERROR" }, { status: 400 });
   }
-  const { message, mode, model } = parsed.data;
+  const { message, mode, model, conversationId: requestedConvoId } = parsed.data;
 
   // Strict Suggest Mode isolation: if MONGODB_READONLY_URI is not configured, do not fall back to main env!
   if (mode === "suggest" && !process.env.MONGODB_READONLY_URI) {
@@ -42,15 +43,39 @@ export async function POST(req: Request) {
 
   await connectDB();
 
-  await ChatMessage.create({ userId, role: "user", content: message, mode });
+  // Find or create conversation
+  let convo = requestedConvoId ? await Conversation.findOne({ _id: requestedConvoId, userId }) : null;
+  const initialTitle = message.trim().slice(0, 40) || "New Chat";
+  if (!convo) {
+    convo = await Conversation.create({
+      userId,
+      title: initialTitle,
+    });
+  } else if (convo.title === "New Chat") {
+    convo.title = initialTitle;
+    await convo.save();
+  }
 
-  const historyDocs = await ChatMessage.find({ userId }).sort({ createdAt: -1 }).limit(HISTORY_LIMIT).lean();
+  const activeConvoId = convo._id;
+
+  await ChatMessage.create({
+    userId,
+    conversationId: activeConvoId,
+    role: "user",
+    content: message,
+    mode,
+  });
+
+  const historyDocs = await ChatMessage.find({ userId, conversationId: activeConvoId })
+    .sort({ createdAt: -1 })
+    .limit(HISTORY_LIMIT)
+    .lean();
   historyDocs.reverse();
 
   const contextSnapshot = await buildContextSnapshot(userId);
   const systemPrompt = `${buildSystemPrompt(mode)}\n\n${contextSnapshot}`;
 
-  logger.info({ userId, mode, model, provider: process.env.AI_PROVIDER ?? "anthropic" }, "chat turn started");
+  logger.info({ userId, mode, model, conversationId: String(activeConvoId), provider: process.env.AI_PROVIDER ?? "anthropic" }, "chat turn started");
 
   try {
     const result = await Promise.race([
@@ -68,11 +93,14 @@ export async function POST(req: Request) {
 
     const assistantMessage = await ChatMessage.create({
       userId,
+      conversationId: activeConvoId,
       role: "assistant",
       content: result.replyText,
       mode,
       relatedActionIds: result.createdActionIds,
     });
+
+    await Conversation.updateOne({ _id: activeConvoId }, { $set: { updatedAt: new Date() } });
 
     const proposals = result.createdActionIds.length
       ? await AIAction.find({ _id: { $in: result.createdActionIds } }).lean()
@@ -80,6 +108,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       reply: assistantMessage.content,
+      conversationId: String(convo._id),
+      conversationTitle: convo.title,
       proposals: proposals.map((p) => ({
         id: String(p._id),
         type: p.type,

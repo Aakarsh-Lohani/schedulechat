@@ -60,4 +60,5 @@ export const chatRequestSchema = z.object({
       "gemini-3.1-pro",
     ])
     .optional(),
+  conversationId: objectIdString.optional(),
 });

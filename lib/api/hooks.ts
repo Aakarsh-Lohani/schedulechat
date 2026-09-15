@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api/fetcher";
-import type { TabDTO, TaskDTO, ActiveTimersDTO, AIActionDTO, ChatReplyDTO, AnalyticsDataDTO } from "@/lib/api/types";
+import type { TabDTO, TaskDTO, ActiveTimersDTO, AIActionDTO, ChatReplyDTO, AnalyticsDataDTO, ConversationDTO } from "@/lib/api/types";
 
 // ---- Tabs ----
 
@@ -219,22 +219,57 @@ export function useUndoAction() {
   });
 }
 
-// ---- Chat ----
+// ---- Chat & Conversations ----
 
-export function useChatHistory() {
+export function useConversations() {
   return useQuery({
-    queryKey: ["chat-history"],
-    queryFn: () => apiFetch<{ messages: { role: "user" | "assistant"; content: string }[] }>("/api/chat/history").then((r) => r.messages),
-    staleTime: Infinity, // only ever loaded once per session; new messages are appended locally
+    queryKey: ["conversations"],
+    queryFn: () => apiFetch<{ conversations: ConversationDTO[] }>("/api/chat/conversations").then((r) => r.conversations),
+  });
+}
+
+export function useCreateConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (title?: string) =>
+      apiFetch<{ conversation: ConversationDTO }>("/api/chat/conversations", {
+        method: "POST",
+        body: JSON.stringify({ title }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+}
+
+export function useDeleteConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch("/api/chat/conversations/" + id, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+      qc.invalidateQueries({ queryKey: ["chat-history"] });
+    },
+  });
+}
+
+export function useChatHistory(conversationId?: string | null) {
+  return useQuery({
+    queryKey: ["chat-history", conversationId ?? "default"],
+    queryFn: () => {
+      const url = conversationId ? `/api/chat/history?conversationId=${conversationId}` : "/api/chat/history";
+      return apiFetch<{ messages: { role: "user" | "assistant"; content: string }[] }>(url).then((r) => r.messages);
+    },
   });
 }
 
 export function useSendChat() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { message: string; mode: "suggest" | "update"; model?: string }) =>
+    mutationFn: (input: { message: string; mode: "suggest" | "update"; model?: string; conversationId?: string | null }) =>
       apiFetch<ChatReplyDTO>("/api/chat", { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-actions"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ai-actions"] });
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
   });
 }
 

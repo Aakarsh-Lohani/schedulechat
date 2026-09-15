@@ -51,9 +51,18 @@ export interface AIActionDTO {
   undoneAt: string | null;
 }
 
+export interface ConversationDTO {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ChatReplyDTO {
   reply: string;
   proposals: { id: string; type: string; summary: string; status: string }[];
+  conversationId?: string;
+  conversationTitle?: string;
 }
 
 export interface ScheduledTaskDTO {
