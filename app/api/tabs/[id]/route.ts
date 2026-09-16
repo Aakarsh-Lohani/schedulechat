@@ -43,8 +43,8 @@ export async function DELETE(req: Request, { params: paramsPromise }: { params: 
   const tab = await Tab.findOne({ _id: params.id, userId });
   if (!tab) return NextResponse.json({ error: "Not found", code: "NOT_FOUND" }, { status: 404 });
 
-  // 1. Guard primary tab ("Projects" only)
-  if (tab.name === "Projects") {
+  // 1. Guard primary tab ("Projects" or system default)
+  if (tab.name === "Projects" || tab.isSystemDefault) {
     return NextResponse.json(
       { error: "The primary tab cannot be deleted.", code: "PRIMARY_TAB_PROTECTED" },
       { status: 400 }

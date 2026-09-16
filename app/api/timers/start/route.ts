@@ -24,16 +24,7 @@ export async function POST(req: Request) {
 
   const slotBusy = await TimerSession.findOne({ userId, slot, status: { $in: ["countdown", "running"] } });
   if (slotBusy) {
-    const startedAtMs = new Date(slotBusy.startedAt).getTime();
-    const plannedDuration = (slotBusy.plannedDurationSeconds + slotBusy.extendedBySeconds) * 1000;
-    if (Date.now() - startedAtMs > plannedDuration + 60 * 1000) {
-      slotBusy.status = "completed";
-      slotBusy.actualEndedAt = new Date(startedAtMs + plannedDuration);
-      slotBusy.contributedSeconds = slotBusy.plannedDurationSeconds + slotBusy.extendedBySeconds;
-      await slotBusy.save();
-    } else {
-      return NextResponse.json({ error: `Timer slot ${slot} is already in use`, code: "SLOT_BUSY" }, { status: 409 });
-    }
+    return NextResponse.json({ error: `Timer slot ${slot} is already in use`, code: "SLOT_BUSY" }, { status: 409 });
   }
 
   const taskActiveElsewhere = await TimerSession.findOne({
@@ -42,19 +33,10 @@ export async function POST(req: Request) {
     status: { $in: ["countdown", "running"] },
   });
   if (taskActiveElsewhere) {
-    const startedAtMs = new Date(taskActiveElsewhere.startedAt).getTime();
-    const plannedDuration = (taskActiveElsewhere.plannedDurationSeconds + taskActiveElsewhere.extendedBySeconds) * 1000;
-    if (Date.now() - startedAtMs > plannedDuration + 60 * 1000) {
-      taskActiveElsewhere.status = "completed";
-      taskActiveElsewhere.actualEndedAt = new Date(startedAtMs + plannedDuration);
-      taskActiveElsewhere.contributedSeconds = taskActiveElsewhere.plannedDurationSeconds + taskActiveElsewhere.extendedBySeconds;
-      await taskActiveElsewhere.save();
-    } else {
-      return NextResponse.json(
-        { error: "This task already has an active timer in the other slot", code: "TASK_ALREADY_ACTIVE" },
-        { status: 409 }
-      );
-    }
+    return NextResponse.json(
+      { error: "This task already has an active timer in the other slot", code: "TASK_ALREADY_ACTIVE" },
+      { status: 409 }
+    );
   }
 
   const now = new Date();

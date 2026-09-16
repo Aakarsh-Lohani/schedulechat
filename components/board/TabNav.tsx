@@ -149,7 +149,7 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
       />
       <NavItem id="today" label="Today's Tasks" active={view === "today"} onClick={() => onChangeView("today")} droppableId="today" />
       {tabs?.map((tab) => {
-        const isPrimary = tab.name === "Projects";
+        const isPrimary = tab.name === "Projects" || tab.isSystemDefault;
         return (
           <NavItem
             key={tab.id}
