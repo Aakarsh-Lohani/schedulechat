@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api/fetcher";
-import type { TabDTO, TaskDTO, ActiveTimersDTO, AIActionDTO, ChatReplyDTO, AnalyticsDataDTO } from "@/lib/api/types";
+import type { TabDTO, TaskDTO, ActiveTimersDTO, AIActionDTO, ChatReplyDTO, AnalyticsDataDTO, ConversationDTO } from "@/lib/api/types";
 
 // ---- Tabs ----
 
@@ -18,6 +18,17 @@ export function useCreateTab() {
   return useMutation({
     mutationFn: (name: string) => apiFetch<{ tab: TabDTO }>("/api/tabs", { method: "POST", body: JSON.stringify({ name }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tabs"] }),
+  });
+}
+
+export function useUpdateTab() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...fields }: { id: string; name?: string; order?: number }) =>
+      apiFetch<{ tab: TabDTO }>(`/api/tabs/${id}`, { method: "PATCH", body: JSON.stringify(fields) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tabs"] });
+    },
   });
 }
 
@@ -56,8 +67,8 @@ function taskQueryString(filter: TaskFilter): string {
 }
 
 export function useTasks(
-  filter: TaskFilter,
-  queryKeySuffix: string,
+  filter: TaskFilter = {},
+  queryKeySuffix: string = "all",
   options?: { enabled?: boolean }
 ) {
   return useQuery({
@@ -122,9 +133,13 @@ export function useActiveTimers() {
 export function useStartTimer() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { taskId: string; slot: 1 | 2 }) =>
+    mutationFn: (input: { taskId?: string; scheduledTaskId?: string; slot: 1 | 2 }) =>
       apiFetch("/api/timers/start", { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["timers", "active"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["timers", "active"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
   });
 }
 
@@ -156,7 +171,11 @@ export function useExtendTimer() {
 export function useStopTimer() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiFetch(`/api/timers/${id}/stop`, { method: "POST" }),
+    mutationFn: (arg: string | { id: string; followed?: boolean; discardTime?: boolean }) => {
+      const id = typeof arg === "string" ? arg : arg.id;
+      const body = typeof arg === "object" ? JSON.stringify({ followed: arg.followed, discardTime: arg.discardTime }) : undefined;
+      return apiFetch(`/api/timers/${id}/stop`, { method: "POST", body });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["timers", "active"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -208,22 +227,71 @@ export function useUndoAction() {
   });
 }
 
-// ---- Chat ----
+// ---- Chat & Conversations ----
 
-export function useChatHistory() {
+export function useConversations() {
   return useQuery({
-    queryKey: ["chat-history"],
-    queryFn: () => apiFetch<{ messages: { role: "user" | "assistant"; content: string }[] }>("/api/chat/history").then((r) => r.messages),
-    staleTime: Infinity, // only ever loaded once per session; new messages are appended locally
+    queryKey: ["conversations"],
+    queryFn: () => apiFetch<{ conversations: ConversationDTO[] }>("/api/chat/conversations").then((r) => r.conversations),
+  });
+}
+
+export function useCreateConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (title?: string) =>
+      apiFetch<{ conversation: ConversationDTO }>("/api/chat/conversations", {
+        method: "POST",
+        body: JSON.stringify({ title }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+}
+
+export function useDeleteConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch("/api/chat/conversations/" + id, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+      qc.invalidateQueries({ queryKey: ["chat-history"] });
+    },
+  });
+}
+
+export function useUpdateConversationTitle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      apiFetch<{ conversation: ConversationDTO }>(`/api/chat/conversations/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function useChatHistory(conversationId?: string | null) {
+  return useQuery({
+    queryKey: ["chat-history", conversationId ?? "default"],
+    queryFn: () => {
+      const url = conversationId ? `/api/chat/history?conversationId=${conversationId}` : "/api/chat/history";
+      return apiFetch<{ messages: { role: "user" | "assistant"; content: string }[] }>(url).then((r) => r.messages);
+    },
   });
 }
 
 export function useSendChat() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { message: string; mode: "suggest" | "update"; model?: string }) =>
+    mutationFn: (input: { message: string; mode: "suggest" | "update"; model?: string; conversationId?: string | null }) =>
       apiFetch<ChatReplyDTO>("/api/chat", { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-actions"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ai-actions"] });
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
   });
 }
 
@@ -316,6 +384,54 @@ export function useAnalytics(tzOffset?: number) {
     queryKey: ["analytics", offset],
     queryFn: () => apiFetch<AnalyticsDataDTO>(`/api/analytics?tzOffset=${offset}`),
     refetchInterval: 60000,
+  });
+}
+
+// ---- Notifications ----
+
+export interface NotificationDTO {
+  id: string;
+  scheduledTaskId: string;
+  title: string;
+  description?: string;
+  date: string;
+  startTime: string;
+  durationMinutes: number;
+  status: "pending" | "approved" | "rejected" | "dismissed";
+  timerSessionId?: string | null;
+  createdAt: string;
+}
+
+export function useNotifications() {
+  const tzOffset = new Date().getTimezoneOffset();
+  return useQuery({
+    queryKey: ["notifications", tzOffset],
+    queryFn: () => apiFetch<{ notifications: NotificationDTO[] }>(`/api/notifications?tzOffset=${tzOffset}`),
+    refetchInterval: 15000,
+  });
+}
+
+export function useNotificationAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      action,
+      slot,
+    }: {
+      id: string;
+      action: "approve" | "reject" | "start" | "dismiss";
+      slot?: 1 | 2;
+    }) =>
+      apiFetch<{ ok: boolean; status?: string }>(`/api/notifications/${id}/action`, {
+        method: "POST",
+        body: JSON.stringify({ action, slot }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["timers", "active"] });
+      qc.invalidateQueries({ queryKey: ["analytics"] });
+    },
   });
 }
 

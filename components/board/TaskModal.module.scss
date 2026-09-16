@@ -61,6 +61,108 @@
   }
 }
 
+.labelChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 22px;
+}
+
+.modalLabelChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  background: rgba(167, 139, 250, 0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.removeLabelBtn {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.addLabelRow {
+  display: flex;
+  gap: 8px;
+
+  input {
+    flex: 1;
+  }
+}
+
+.addLabelBtn {
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-primary;
+  border-radius: t.$radius-sm;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: t.$bg-elevated;
+    border-color: t.$accent-ai;
+  }
+}
+
+.recommendedContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.recommendedTitle {
+  font-size: 10px;
+  color: t.$text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 600;
+}
+
+.recommendedChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.recommendedChip {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed t.$border-subtle;
+  color: t.$text-muted;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(167, 139, 250, 0.12);
+    border-color: t.$accent-ai;
+    color: t.$accent-ai;
+  }
+}
+
 .actions {
   display: flex;
   justify-content: space-between;

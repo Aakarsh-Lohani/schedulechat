@@ -3,7 +3,7 @@ import { Schema, model, models, type InferSchemaType, type Model } from "mongoos
 const TaskSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    tabId: { type: Schema.Types.ObjectId, ref: "Tab", required: true, index: true },
+    tabId: { type: Schema.Types.ObjectId, ref: "Tab", index: true, default: null },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
 
@@ -21,6 +21,7 @@ const TaskSchema = new Schema(
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
     scheduledTaskId: { type: Schema.Types.ObjectId, ref: "ScheduledTask", default: null },
+    labels: { type: [String], default: [] },
 
     order: { type: Number, default: 0 },
   },
@@ -33,5 +34,9 @@ TaskSchema.index({ userId: 1, scheduledTaskId: 1, scheduledDate: 1 });
 TaskSchema.index({ userId: 1, startDate: 1, endDate: 1 });
 
 export type TaskDoc = InferSchemaType<typeof TaskSchema> & { _id: Schema.Types.ObjectId };
+
+if (models.Task && !models.Task.schema.paths.labels) {
+  delete (models as Record<string, unknown>).Task;
+}
 
 export const Task: Model<TaskDoc> = (models.Task as Model<TaskDoc>) || model<TaskDoc>("Task", TaskSchema);

@@ -7,6 +7,9 @@ import {
   KeyboardSensor,
   useSensor,
   useSensors,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { useRealtimeSync } from "@/lib/realtime/useRealtimeSync";
@@ -21,7 +24,17 @@ import { AlarmDialog } from "@/components/scheduled/AlarmDialog";
 import { useScheduledTaskAlarms } from "@/lib/scheduled/useScheduledTaskAlarms";
 import { DashboardView } from "@/components/dashboard/DashboardView";
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { ErrorPopup } from "@/components/ui/ErrorPopup";
 import styles from "./AppShell.module.scss";
+
+const customCollisionDetection: CollisionDetection = (args) => {
+  // First check if pointer is directly within a droppable (e.g. timer:1, timer:2, today, tab:...)
+  const pointerCollisions = pointerWithin(args);
+  if (pointerCollisions.length > 0) {
+    return pointerCollisions;
+  }
+  return rectIntersection(args);
+};
 
 export function AppShell() {
   useRealtimeSync();
@@ -69,20 +82,22 @@ export function AppShell() {
   }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={customCollisionDetection} onDragEnd={handleDragEnd}>
       <div className={styles.app}>
         <TimerBar />
         <TabNav view={view} onChangeView={setView} />
         <div className={styles.main}>
-          {view === "dashboard" ? (
-            <DashboardView />
-          ) : view === "calendar" ? (
-            <CalendarView />
-          ) : view === "scheduled" ? (
-            <ScheduledTasksView />
-          ) : (
-            <TaskColumn view={view} />
-          )}
+          <div className={styles.viewContainer}>
+            {view === "dashboard" ? (
+              <DashboardView />
+            ) : view === "calendar" ? (
+              <CalendarView />
+            ) : view === "scheduled" ? (
+              <ScheduledTasksView />
+            ) : (
+              <TaskColumn view={view} />
+            )}
+          </div>
           {chatPanelOpen && <ChatPanel />}
         </div>
         {activeAlarm && (
@@ -93,6 +108,7 @@ export function AppShell() {
             onDismiss={handleDismiss}
           />
         )}
+        <ErrorPopup />
       </div>
     </DndContext>
   );

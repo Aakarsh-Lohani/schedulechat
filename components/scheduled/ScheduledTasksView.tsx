@@ -225,7 +225,7 @@ export function ScheduledTasksView() {
                     onClick={() => handleOpenEdit(task)}
                     title="Edit scheduled task"
                   >
-                    <Pencil size={14} />
+                    <Pencil size={14} color="#ffffff" />
                   </button>
                   <button
                     type="button"

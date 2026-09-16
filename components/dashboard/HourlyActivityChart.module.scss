@@ -1,0 +1,118 @@
+@use "../../styles/tokens" as t;
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.peakHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.peakBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.barsWrapper {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 120px;
+  padding: 10px 4px 0 4px;
+  border-bottom: 1px solid t.$border-subtle;
+  position: relative;
+}
+
+.barCol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  position: relative;
+  cursor: pointer;
+
+  &:hover .tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-4px);
+  }
+
+  &:hover .bar {
+    opacity: 1;
+    filter: brightness(1.2);
+  }
+}
+
+.barTrack {
+  width: 100%;
+  max-width: 18px;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px 3px 0 0;
+}
+
+.bar {
+  width: 100%;
+  background: t.$accent-timer;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.3s ease, background-color 0.2s;
+  min-height: 2px;
+  opacity: 0.85;
+
+  &.isPeak {
+    background: #38bdf8;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+    opacity: 1;
+  }
+
+  &.empty {
+    opacity: 0.2;
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e232d;
+  color: t.$text-primary;
+  border: 1px solid t.$border-subtle;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.labelsRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: t.$text-muted;
+  font-family: t.$font-mono;
+  padding: 2px 2px 0 2px;
+}

@@ -13,6 +13,7 @@ import {
 import { formatClock, formatDuration } from "@/lib/timers/budget";
 import { COUNTDOWN_SECONDS } from "@/lib/timers/constants";
 import type { TimerSlotDTO } from "@/lib/api/types";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import styles from "./TimerBar.module.scss";
 
 function useNowTick(intervalMs = 1000) {
@@ -72,6 +73,13 @@ function SlotView({
     }
   }, [sessionId, isCountdown]);
 
+  const [scheduledApproved, setScheduledApproved] = useState(false);
+
+  // Reset approval on session change
+  useEffect(() => {
+    setScheduledApproved(false);
+  }, [sessionId]);
+
   if (!session) {
     return (
       <div ref={setNodeRef} className={`${styles.slot} ${isDropTarget ? styles.dropTarget : ""}`}>
@@ -114,6 +122,27 @@ function SlotView({
         </span>
       </div>
       <div className={styles.actions}>
+        {session.isScheduledTask && !scheduledApproved && (
+          <div className={styles.scheduledApproval}>
+            <span className={styles.approvalPrompt}>Followed?</span>
+            <button
+              type="button"
+              className={`${styles.miniBtn} ${styles.approveBtn}`}
+              onClick={() => setScheduledApproved(true)}
+              title="Yes, count this time"
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              className={`${styles.miniBtn} ${styles.rejectBtn}`}
+              onClick={() => stopTimer.mutate({ id: session.id, followed: false })}
+              title="No, mark not followed and discard time"
+            >
+              No
+            </button>
+          </div>
+        )}
         {isOver && (
           <button className={styles.miniBtn} onClick={() => extendTimer.mutate({ id: session.id, seconds: 600 })}>
             +10m
@@ -170,6 +199,7 @@ export function TimerBar() {
         <div className={styles.brand}>
           Schedule<span>Chat</span>
         </div>
+        <NotificationBell />
         <button
           type="button"
           className={styles.signOutBtn}

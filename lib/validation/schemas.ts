@@ -22,6 +22,7 @@ export const createTaskSchema = z.object({
   startDate: z.string().datetime().nullable().optional(),
   endDate: z.string().datetime().nullable().optional(),
   source: z.enum(["manual", "ai-suggested"]).default("manual"),
+  labels: z.array(z.string().trim().min(1).max(50)).optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -35,14 +36,20 @@ export const updateTaskSchema = z.object({
   scheduledDate: z.string().datetime().nullable().optional(),
   startDate: z.string().datetime().nullable().optional(),
   endDate: z.string().datetime().nullable().optional(),
+  labels: z.array(z.string().trim().min(1).max(50)).optional(),
   order: z.number().optional(),
   aiAccepted: z.boolean().optional(),
 });
 
-export const startTimerSchema = z.object({
-  taskId: objectIdString,
-  slot: z.union([z.literal(1), z.literal(2)]),
-});
+export const startTimerSchema = z
+  .object({
+    taskId: objectIdString.optional(),
+    scheduledTaskId: objectIdString.optional(),
+    slot: z.union([z.literal(1), z.literal(2)]),
+  })
+  .refine((data) => data.taskId || data.scheduledTaskId, {
+    message: "Either taskId or scheduledTaskId must be provided",
+  });
 
 export const extendTimerSchema = z.object({
   seconds: z.number().min(1).max(4 * 60 * 60),
@@ -60,4 +67,5 @@ export const chatRequestSchema = z.object({
       "gemini-3.1-pro",
     ])
     .optional(),
+  conversationId: objectIdString.optional(),
 });

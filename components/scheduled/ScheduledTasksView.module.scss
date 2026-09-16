@@ -162,16 +162,18 @@
 .iconBtn {
   background: none;
   border: none;
-  color: t.$text-muted;
+  color: #ffffff;
   cursor: pointer;
   padding: 3px;
   border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  opacity: 0.85;
 
   &:hover {
-    color: t.$text-primary;
+    color: #ffffff;
+    opacity: 1;
     background: t.$bg-elevated;
   }
 

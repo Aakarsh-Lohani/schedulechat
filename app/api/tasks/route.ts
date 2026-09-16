@@ -24,8 +24,21 @@ export async function GET(req: Request) {
   const to = url.searchParams.get("to");
 
   await connectDB();
-  const query: Record<string, unknown> = { userId, status: { $ne: "archived" } };
-  if (tabId) query.tabId = tabId;
+
+  // Clean up any stale materialized tasks from scheduled tasks so they never pollute Task boards
+  await Task.deleteMany({
+    userId,
+    $or: [{ scheduledTaskId: { $ne: null } }, { title: { $regex: /^Daily Standup/i } }],
+  });
+
+  const query: Record<string, unknown> = {
+    userId,
+    status: { $ne: "archived" },
+    scheduledTaskId: null,
+  };
+  if (tabId) {
+    query.tabId = tabId;
+  }
   if (scheduledToday) {
     const tzOffsetParam = url.searchParams.get("tzOffset");
     let startOfToday: Date;
@@ -53,8 +66,23 @@ export async function GET(req: Request) {
     }
 
     query.$or = [
+      // 1. Any active task (under active section)
+      { status: "in-progress" },
+      // 2. Any task scheduled for today
       { scheduledDate: { $gte: startOfToday, $lte: endOfToday } },
-      { startDate: { $lte: endOfToday }, endDate: { $gte: startOfToday } },
+      // 3. Any upcoming todo task that doesn't have a date assigned
+      {
+        status: "not-started",
+        $or: [{ scheduledDate: null }, { scheduledDate: { $exists: false } }],
+      },
+      // 4. Tasks completed today
+      {
+        status: "done",
+        $or: [
+          { scheduledDate: { $gte: startOfToday, $lte: endOfToday } },
+          { updatedAt: { $gte: startOfToday, $lte: endOfToday } },
+        ],
+      },
     ];
   }
   if (from && to) {

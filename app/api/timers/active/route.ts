@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/connect";
 import { getCurrentUserId } from "@/lib/session";
 import { TimerSession } from "@/lib/db/models/TimerSession";
+import { Task } from "@/lib/db/models/Task";
 
 /**
  * Returns both timer slots' current session (if any) plus a derived "today total"
@@ -18,14 +19,21 @@ export async function GET() {
   todayStart.setHours(0, 0, 0, 0);
   const nowMs = Date.now();
 
-  const [activeSessions, allCompletedSessions] = await Promise.all([
+  const [activeSessions, allCompletedSessions, activeTasks] = await Promise.all([
     TimerSession.find({ userId, status: { $in: ["countdown", "running"] } })
-      .populate("taskId", "title defaultTimerMinutes")
+      .populate("taskId", "title defaultTimerMinutes scheduledTaskId")
+      .populate("scheduledTaskId", "title durationMinutes")
       .lean(),
     TimerSession.find({ userId, status: "completed" })
-      .select("contributedSeconds actualEndedAt startedAt")
+      .select("contributedSeconds actualEndedAt startedAt taskId scheduledTaskId")
       .lean(),
+    Task.find({ userId, status: { $ne: "archived" } }).select("_id").lean(),
   ]);
+
+  const activeTaskIds = new Set(activeTasks.map((t) => String(t._id)));
+  const validCompletedSessions = allCompletedSessions.filter(
+    (s) => (s.taskId && activeTaskIds.has(String(s.taskId))) || (s.scheduledTaskId && (s.contributedSeconds ?? 0) > 0)
+  );
 
   const slots: Record<1 | 2, unknown> = { 1: null, 2: null };
   for (const s of activeSessions) {
@@ -46,11 +54,16 @@ export async function GET() {
       continue;
     }
 
-    const populatedTask = s.taskId as unknown as { _id: unknown; title?: string } | null;
+    const populatedTask = s.taskId as unknown as { _id: unknown; title?: string; scheduledTaskId?: unknown } | null;
+    const populatedScheduledTask = s.scheduledTaskId as unknown as { _id: unknown; title?: string } | null;
+    const taskTitle = populatedTask?.title ?? populatedScheduledTask?.title ?? "Scheduled Task";
+    const isScheduledTask = Boolean(s.scheduledTaskId || populatedTask?.scheduledTaskId);
+
     slots[slotNum] = {
       id: String(s._id),
-      taskId: String(populatedTask?._id ?? s.taskId),
-      taskTitle: populatedTask?.title ?? "Task",
+      taskId: String(populatedTask?._id ?? s.taskId ?? populatedScheduledTask?._id ?? s.scheduledTaskId ?? ""),
+      taskTitle,
+      isScheduledTask,
       status: s.status,
       startedAt: s.startedAt,
       countdownEndsAt: s.countdownEndsAt,
@@ -62,7 +75,7 @@ export async function GET() {
   let totalUsageSeconds = 0;
   let completedSecondsToday = 0;
 
-  for (const s of allCompletedSessions) {
+  for (const s of validCompletedSessions) {
     const seconds = s.contributedSeconds ?? 0;
     totalUsageSeconds += seconds;
 

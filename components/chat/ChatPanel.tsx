@@ -1,13 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { Sparkles, Check, X, Plus, Trash2, CalendarClock, Pencil } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Sparkles, Check, X, Plus, Trash2, CalendarClock, Pencil, MessageSquare } from "lucide-react";
 import { useUIStore } from "@/lib/store/uiStore";
 import { MarkdownContent } from "./MarkdownContent";
 import {
   useAiActions,
   useApproveAction,
   useChatHistory,
+  useConversations,
+  useCreateConversation,
+  useDeleteConversation,
+  useUpdateConversationTitle,
   useRejectAction,
   useSendChat,
   useUndoAction,
@@ -45,20 +49,89 @@ function getActionBadge(type: string) {
 }
 
 export function ChatPanel() {
-  const { chatMode, setChatMode } = useUIStore();
-  const { data: history } = useChatHistory();
+  const { chatMode, setChatMode, copilotWidth, setCopilotWidth } = useUIStore();
+  const { data: conversations } = useConversations();
+  const createConvo = useCreateConversation();
+  const deleteConvo = useDeleteConversation();
+  const updateConvoTitle = useUpdateConversationTitle();
+
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState("");
+
+  // Sync active conversation when conversations load or when none is selected
+  useEffect(() => {
+    if (conversations && conversations.length > 0 && !activeConversationId) {
+      setActiveConversationId(conversations[0]?.id ?? null);
+    }
+  }, [conversations, activeConversationId]);
+
+  const { data: history } = useChatHistory(activeConversationId);
   const [newMessages, setNewMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
+  const [isResizing, setIsResizing] = useState(false);
+
   const sendChat = useSendChat();
   const { data: actions } = useAiActions();
   const approveAction = useApproveAction();
   const rejectAction = useRejectAction();
   const undoAction = useUndoAction();
 
-  // Rendered history is the persisted thread plus whatever's been sent this session —
-  // derived directly at render time rather than copied into state via an effect.
+  // Derived messages for current conversation thread
   const messages = [...(history ?? []), ...newMessages];
+
+  // Drag resizing for Copilot width
+  function handleStartResize(e: React.MouseEvent) {
+    e.preventDefault();
+    setIsResizing(true);
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const newWidth = window.innerWidth - moveEvent.clientX;
+      setCopilotWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      setIsResizing(false);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }
+
+  async function handleNewChat() {
+    try {
+      const res = await createConvo.mutateAsync("New Chat");
+      setActiveConversationId(res.conversation.id);
+      setNewMessages([]);
+    } catch {
+      // handled globally
+    }
+  }
+
+  async function handleDeleteConvo(id: string) {
+    if (confirm("Delete this conversation?")) {
+      await deleteConvo.mutateAsync(id);
+      setActiveConversationId(null);
+      setNewMessages([]);
+    }
+  }
+
+  const activeConvo = conversations?.find((c) => c.id === activeConversationId);
+
+  function startEditingTitle() {
+    if (!activeConvo) return;
+    setEditTitleValue(activeConvo.title);
+    setIsEditingTitle(true);
+  }
+
+  async function handleSaveTitle() {
+    if (!activeConversationId || !editTitleValue.trim()) {
+      setIsEditingTitle(false);
+      return;
+    }
+    await updateConvoTitle.mutateAsync({ id: activeConversationId, title: editTitleValue.trim() });
+    setIsEditingTitle(false);
+  }
 
   async function handleSend() {
     const text = input.trim();
@@ -70,7 +143,11 @@ export function ChatPanel() {
         message: text,
         mode: chatMode,
         model: selectedModel,
+        conversationId: activeConversationId,
       });
+      if (result.conversationId && result.conversationId !== activeConversationId) {
+        setActiveConversationId(result.conversationId);
+      }
       setNewMessages((m) => [...m, { role: "assistant", content: result.reply }]);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Failed to communicate with Copilot";
@@ -89,38 +166,92 @@ export function ChatPanel() {
   const recentHistory = (actions ?? []).filter((a) => a.status === "executed" || a.status === "undone").slice(0, 10);
 
   return (
-    <div className={styles.chat}>
+    <div className={styles.chat} style={{ width: copilotWidth }}>
+      <div
+        className={`${styles.resizeHandle} ${isResizing ? styles.resizing : ""}`}
+        onMouseDown={handleStartResize}
+        title="Drag to resize Copilot"
+      />
+
       <div className={styles.head}>
-        <div className={styles.titleRow}>
-          <div className={styles.title}>Copilot</div>
-          <select
-            className={styles.modelSelect}
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            title="Select Gemini Model"
-          >
-            {GEMINI_MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className={styles.modeToggle}>
-          <button
-            type="button"
-            className={`${styles.modeBtn} ${chatMode === "suggest" ? styles.active : ""}`}
-            onClick={() => setChatMode("suggest")}
-          >
-            Suggest
-          </button>
-          <button
-            type="button"
-            className={`${styles.modeBtn} ${chatMode === "update" ? styles.active : ""}`}
-            onClick={() => setChatMode("update")}
-          >
-            Update
-          </button>
+        <div className={styles.convoRow}>
+          {isEditingTitle ? (
+            <div className={styles.titleEditRow}>
+              <input
+                type="text"
+                className={styles.titleEditInput}
+                value={editTitleValue}
+                onChange={(e) => setEditTitleValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveTitle();
+                  if (e.key === "Escape") setIsEditingTitle(false);
+                }}
+                autoFocus
+              />
+              <button type="button" className={styles.iconBtn} onClick={handleSaveTitle} title="Save title">
+                <Check size={12} />
+              </button>
+              <button type="button" className={styles.iconBtn} onClick={() => setIsEditingTitle(false)} title="Cancel">
+                <X size={12} />
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className={styles.convoSelector}>
+                <MessageSquare size={13} className={styles.convoIcon} />
+                <select
+                  className={styles.convoSelect}
+                  value={activeConversationId ?? ""}
+                  onChange={(e) => {
+                    setActiveConversationId(e.target.value || null);
+                    setNewMessages([]);
+                  }}
+                  title="Select conversation"
+                >
+                  {conversations && conversations.length > 0 ? (
+                    conversations.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Current Thread</option>
+                  )}
+                </select>
+              </div>
+
+              {activeConversationId && (
+                <button
+                  type="button"
+                  className={styles.editChatBtn}
+                  onClick={startEditingTitle}
+                  title="Rename conversation"
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
+
+              <button
+                type="button"
+                className={styles.newChatBtn}
+                onClick={handleNewChat}
+                title="Start new conversation"
+              >
+                <Plus size={12} /> New
+              </button>
+
+              {activeConversationId && (
+                <button
+                  type="button"
+                  className={styles.delChatBtn}
+                  onClick={() => handleDeleteConvo(activeConversationId)}
+                  title="Delete conversation"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -200,10 +331,43 @@ export function ChatPanel() {
       </div>
 
       <div className={styles.inputWrap}>
+        {/* Suggest / Update toggle and Model select positioned near text box */}
+        <div className={styles.inputControlsRow}>
+          <div className={styles.modeToggle}>
+            <button
+              type="button"
+              className={`${styles.modeBtn} ${chatMode === "suggest" ? styles.active : ""}`}
+              onClick={() => setChatMode("suggest")}
+            >
+              Suggest
+            </button>
+            <button
+              type="button"
+              className={`${styles.modeBtn} ${chatMode === "update" ? styles.active : ""}`}
+              onClick={() => setChatMode("update")}
+            >
+              Update
+            </button>
+          </div>
+
+          <select
+            className={styles.modelSelect}
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            title="Select Gemini Model"
+          >
+            {GEMINI_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className={styles.inputRow}>
           <input
             className={styles.textInput}
-            placeholder="Ask Copilot or approve a change…"
+            placeholder="Ask Copilot or request changes…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}

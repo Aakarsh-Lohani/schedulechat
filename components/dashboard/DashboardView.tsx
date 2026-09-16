@@ -10,10 +10,13 @@ import {
   CheckCircle2,
   TrendingUp,
   Sparkles,
+  Tag,
 } from "lucide-react";
 import { useAnalytics } from "@/lib/api/hooks";
 import { formatTimeUsage } from "@/lib/analytics/metrics";
 import { LineChart } from "./LineChart";
+import { HourlyActivityChart } from "./HourlyActivityChart";
+import { AllTasksTable } from "./AllTasksTable";
 import styles from "./DashboardView.module.scss";
 
 type TimelineRange = "7d" | "14d" | "30d";
@@ -31,15 +34,24 @@ export function DashboardView() {
     );
   }
 
-  const { metrics, timelines, overrunTasks, tabDistribution, updatedAt } = data;
+  const {
+    metrics,
+    timelines,
+    tabDistribution,
+    labelDistribution,
+    hourlyActivity,
+    allTasks,
+    updatedAt,
+  } = data;
   const currentTimeline = timelines[range] || [];
 
   const formattedUpdated = updatedAt
     ? new Date(updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : "";
 
-  // Compute maximum tab hours for relative progress calculation
+  // Compute maximum tab & label hours for relative progress calculation
   const maxTabHours = Math.max(...tabDistribution.map((t) => t.hours), 0.1);
+  const maxLabelHours = Math.max(...(labelDistribution || []).map((l) => l.hours), 0.1);
 
   return (
     <div className={styles.container}>
@@ -157,68 +169,19 @@ export function DashboardView() {
         <LineChart data={currentTimeline} />
       </section>
 
-      {/* Two Column Split: Overrun Tasks & Project Distribution */}
+      {/* 24-Hour Activity Time Graph */}
+      <section className={styles.chartCard}>
+        <div className={styles.chartTopBar}>
+          <h2 className={styles.sectionHeading}>
+            <Clock size={16} />
+            Daily Activity Time (Peak Focus Hours)
+          </h2>
+        </div>
+        <HourlyActivityChart data={hourlyActivity || []} />
+      </section>
+
+      {/* Two Column Split: Tab Distribution & Label Distribution */}
       <div className={styles.splitRow}>
-        {/* Section: Tasks Taking More Time Than Intended */}
-        <section className={styles.panelCard}>
-          <div className={styles.chartTopBar}>
-            <h2 className={styles.sectionHeading}>
-              <AlertTriangle size={16} />
-              Tasks Taking More Time Than Intended
-            </h2>
-          </div>
-
-          {overrunTasks.length === 0 ? (
-            <div className={styles.emptyNotice}>
-              All tracked tasks are currently within their estimated durations.
-            </div>
-          ) : (
-            <div className={styles.overrunList}>
-              {overrunTasks.map((t) => (
-                <div
-                  key={t.id}
-                  className={`${styles.overrunItem} ${t.isOverrun ? styles.hasOverrun : ""}`}
-                >
-                  <div className={styles.overrunHeader}>
-                    <h3 className={styles.taskTitle}>{t.title}</h3>
-                    {t.isOverrun ? (
-                      <span className={styles.overrunBadge}>
-                        +{t.overrunMinutes}m over ({t.percentOfEstimate}%)
-                      </span>
-                    ) : (
-                      <span className={styles.withinBudgetBadge}>
-                        <CheckCircle2 size={12} />
-                        Within budget
-                      </span>
-                    )}
-                  </div>
-
-                  <div className={styles.progressBarContainer}>
-                    <div
-                      className={`${styles.progressBarFill} ${
-                        t.isOverrun ? styles.overrun : styles.normal
-                      }`}
-                      style={{
-                        width: `${Math.min(100, t.percentOfEstimate)}%`,
-                      }}
-                    />
-                  </div>
-
-                  <div className={styles.overrunMeta}>
-                    <div className={styles.tagGroup}>
-                      <span className={styles.tabBadge}>{t.tabName}</span>
-                      <span>Status: {t.status}</span>
-                    </div>
-                    <div>
-                      {t.trackedMinutes}m spent / {t.estimateMinutes}m est.
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
         {/* Section: Tab / Project Time Distribution */}
         <section className={styles.panelCard}>
           <div className={styles.chartTopBar}>
@@ -256,7 +219,59 @@ export function DashboardView() {
             </div>
           )}
         </section>
+
+        {/* Section: Label Time Distribution */}
+        <section className={styles.panelCard}>
+          <div className={styles.chartTopBar}>
+            <h2 className={styles.sectionHeading}>
+              <Tag size={16} />
+              Distribution by Label
+            </h2>
+          </div>
+
+          {!labelDistribution || labelDistribution.length === 0 ? (
+            <div className={styles.emptyNotice}>
+              No label focus data recorded yet.
+            </div>
+          ) : (
+            <div className={styles.tabDistList}>
+              {labelDistribution.map((lbl) => {
+                const percentage = maxLabelHours > 0 ? (lbl.hours / maxLabelHours) * 100 : 0;
+                return (
+                  <div key={lbl.name} className={styles.tabDistItem}>
+                    <div className={styles.tabDistHeader}>
+                      <span className={styles.name}>{lbl.name}</span>
+                      <span className={styles.hours}>
+                        {lbl.hours > 0 ? `${lbl.hours}h` : `${lbl.minutes}m`}
+                      </span>
+                    </div>
+                    <div className={styles.tabBarWrapper}>
+                      <div
+                        className={styles.tabBarFill}
+                        style={{
+                          width: `${Math.max(4, Math.min(100, percentage))}%`,
+                          background: "#c4b5fd",
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
+
+      {/* All Tasks Table with search, budget filter, and label filter */}
+      <section className={styles.panelCard}>
+        <div className={styles.chartTopBar}>
+          <h2 className={styles.sectionHeading}>
+            <CheckCircle2 size={16} />
+            All Tasks Overview &amp; Budget Tracking
+          </h2>
+        </div>
+        <AllTasksTable tasks={allTasks || []} />
+      </section>
     </div>
   );
 }

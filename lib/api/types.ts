@@ -21,6 +21,7 @@ export interface TaskDTO {
   startDate: string | null;
   endDate: string | null;
   scheduledTaskId?: string | null;
+  labels: string[];
   order: number;
 }
 
@@ -28,6 +29,7 @@ export interface TimerSlotDTO {
   id: string;
   taskId: string;
   taskTitle: string;
+  isScheduledTask?: boolean;
   status: "countdown" | "running";
   startedAt: string;
   countdownEndsAt: string | null;
@@ -51,9 +53,18 @@ export interface AIActionDTO {
   undoneAt: string | null;
 }
 
+export interface ConversationDTO {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ChatReplyDTO {
   reply: string;
   proposals: { id: string; type: string; summary: string; status: string }[];
+  conversationId?: string;
+  conversationTitle?: string;
 }
 
 export interface ScheduledTaskDTO {
@@ -100,6 +111,33 @@ export interface AnalyticsTabDistributionDTO {
   minutes: number;
 }
 
+export interface AnalyticsLabelDistributionDTO {
+  name: string;
+  hours: number;
+  minutes: number;
+}
+
+export interface AnalyticsHourlyActivityDTO {
+  hour: number;
+  label: string;
+  minutes: number;
+  sessionCount: number;
+}
+
+export interface AnalyticsAllTaskDTO {
+  id: string;
+  title: string;
+  tabName: string;
+  status: string;
+  progressPercent: number;
+  estimateMinutes: number;
+  trackedMinutes: number;
+  overrunMinutes: number;
+  isOverrun: boolean;
+  percentOfEstimate: number;
+  labels: string[];
+}
+
 export interface AnalyticsDataDTO {
   metrics: {
     todaySeconds: number;
@@ -117,7 +155,10 @@ export interface AnalyticsDataDTO {
     "30d": AnalyticsTimelinePointDTO[];
   };
   overrunTasks: AnalyticsOverrunTaskDTO[];
+  allTasks: AnalyticsAllTaskDTO[];
   tabDistribution: AnalyticsTabDistributionDTO[];
+  labelDistribution: AnalyticsLabelDistributionDTO[];
+  hourlyActivity: AnalyticsHourlyActivityDTO[];
   updatedAt: string;
 }
 

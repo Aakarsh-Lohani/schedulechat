@@ -53,17 +53,29 @@ export async function GET(req: Request) {
     status: { $in: ["completed", "running"] },
   }).lean();
 
-  // Fetch tasks and tabs
-  const tasks = await Task.find({ userId, status: { $ne: "archived" } }).lean();
-  const tabs = await Tab.find({ userId }).lean();
-  const tabNameMap = new Map(tabs.map((t) => [String(t._id), t.name]));
+  // Fetch active tabs and filter out tasks from archived tabs or with archived status
+  const activeTabs = await Tab.find({ userId, status: "active" }).lean();
+  const activeTabIds = new Set(activeTabs.map((t) => String(t._id)));
+  const tabNameMap = new Map(activeTabs.map((t) => [String(t._id), t.name]));
+
+  const candidateTasks = await Task.find({
+    userId,
+    status: { $in: ["not-started", "in-progress", "done"] },
+  }).lean();
+
+  const tasks = candidateTasks.filter((t) => !t.tabId || activeTabIds.has(String(t.tabId)));
+  const validTaskIds = new Set(tasks.map((t) => String(t._id)));
+  // Filter sessions to only those associated with active tasks or scheduled tasks
+  const validSessions = sessions.filter(
+    (s) => validTaskIds.has(String(s.taskId)) || (Boolean(s.scheduledTaskId) && (s.contributedSeconds ?? 0) > 0)
+  );
 
   let todaySeconds = 0;
   let thisWeekSeconds = 0;
   let thisMonthSeconds = 0;
   let allTimeSeconds = 0;
 
-  for (const s of sessions) {
+  for (const s of validSessions) {
     const started = new Date(s.startedAt);
     const ended = s.actualEndedAt
       ? new Date(s.actualEndedAt)
@@ -98,7 +110,7 @@ export async function GET(req: Request) {
       const dayEnd = new Date(dayStart.getTime() + DAY_MS - 1);
 
       let dayActualSec = 0;
-      for (const s of sessions) {
+      for (const s of validSessions) {
         const started = new Date(s.startedAt);
         const ended = s.actualEndedAt
           ? new Date(s.actualEndedAt)
@@ -178,6 +190,68 @@ export async function GET(req: Request) {
     minutes: Math.round(seconds / 60),
   }));
 
+  // Label distribution
+  const labelMap = new Map<string, number>();
+  for (const t of tasks) {
+    const sec = t.totalTrackedSeconds || 0;
+    const taskLabels = Array.isArray(t.labels) && t.labels.length > 0 ? t.labels : ["Unlabeled"];
+    for (const lbl of taskLabels) {
+      labelMap.set(lbl, (labelMap.get(lbl) || 0) + sec);
+    }
+  }
+
+  const labelDistribution = Array.from(labelMap.entries())
+    .map(([name, seconds]) => ({
+      name,
+      hours: Number((seconds / 3600).toFixed(1)),
+      minutes: Math.round(seconds / 60),
+    }))
+    .sort((a, b) => b.minutes - a.minutes);
+
+  // Hourly activity (0-23) based on session start times aligned to client timezone
+  const hourlyActivity = Array.from({ length: 24 }, (_, h) => {
+    const ampm = h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
+    return {
+      hour: h,
+      label: ampm,
+      minutes: 0,
+      sessionCount: 0,
+    };
+  });
+
+  for (const s of validSessions) {
+    const started = new Date(s.startedAt);
+    const localStart = new Date(started.getTime() - tzOffsetMinutes * 60 * 1000);
+    const hour = localStart.getUTCHours();
+    const durSec =
+      s.status === "completed"
+        ? s.contributedSeconds || s.plannedDurationSeconds
+        : Math.min(s.plannedDurationSeconds, Math.floor((Date.now() - started.getTime()) / 1000));
+    if (hourlyActivity[hour]) {
+      hourlyActivity[hour].minutes += Math.round(durSec / 60);
+      hourlyActivity[hour].sessionCount += 1;
+    }
+  }
+
+  // All Tasks overview
+  const allTasks = tasks.map((t) => {
+    const trackedSec = t.totalTrackedSeconds || 0;
+    const { isOverrun, overrunMinutes, percentOfEstimate } = calculateOverrun(t.estimateMinutes, trackedSec);
+    return {
+      id: String(t._id),
+      title: t.title,
+      tabName: tabNameMap.get(String(t.tabId)) || "General",
+      status: t.status,
+      progressPercent: t.progressPercent,
+      estimateMinutes: t.estimateMinutes,
+      trackedMinutes: Math.round(trackedSec / 60),
+      overrunMinutes,
+      isOverrun,
+      percentOfEstimate,
+      labels: Array.isArray(t.labels) ? t.labels : [],
+    };
+  });
+
   const activeTasksCount = tasks.filter((t) => t.status === "in-progress").length;
   const completedTasksCount = tasks.filter((t) => t.status === "done").length;
   const upcomingTasksCount = tasks.filter((t) => t.status === "not-started").length;
@@ -199,7 +273,10 @@ export async function GET(req: Request) {
       "30d": timeline30d,
     },
     overrunTasks: overrunTasks.slice(0, 10),
+    allTasks,
     tabDistribution,
+    labelDistribution,
+    hourlyActivity,
     updatedAt: new Date().toISOString(),
   });
 }

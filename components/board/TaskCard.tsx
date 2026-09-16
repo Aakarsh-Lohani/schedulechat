@@ -15,23 +15,35 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
   });
   const updateTask = useUpdateTask();
 
-  // Local state for buttery smooth 60fps slider adjustments
-  const [prevPercent, setPrevPercent] = useState(task.progressPercent);
-  const [progress, setProgress] = useState(task.progressPercent);
+  const [prevEstimate, setPrevEstimate] = useState(task.estimateMinutes);
+  const [estMinutes, setEstMinutes] = useState(task.estimateMinutes);
 
-  if (task.progressPercent !== prevPercent) {
-    setPrevPercent(task.progressPercent);
-    setProgress(task.progressPercent);
+  if (task.estimateMinutes !== prevEstimate) {
+    setPrevEstimate(task.estimateMinutes);
+    setEstMinutes(task.estimateMinutes);
   }
 
-  function commitProgress(val: number) {
-    if (val !== task.progressPercent) {
-      updateTask.mutate({ id: task.id, progressPercent: val });
+  function commitEstimate(val: number) {
+    const clamped = Math.max(5, Math.min(1440, Math.round(val)));
+    setEstMinutes(clamped);
+    if (clamped !== task.estimateMinutes) {
+      updateTask.mutate({ id: task.id, estimateMinutes: clamped });
     }
   }
 
+  function handleAdjustEstimate(delta: number) {
+    const newVal = Math.max(5, Math.min(1440, (task.estimateMinutes || 30) + delta));
+    setEstMinutes(newVal);
+    updateTask.mutate({ id: task.id, estimateMinutes: newVal });
+  }
+
   const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        zIndex: isDragging ? 9999 : undefined,
+        position: isDragging ? ("relative" as const) : undefined,
+        pointerEvents: isDragging ? ("none" as const) : undefined,
+      }
     : undefined;
 
   const scheduledLabel = task.scheduledDate
@@ -44,8 +56,8 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
       style={style}
       className={`${styles.card} ${isDragging ? styles.dragging : ""}`}
     >
-      <div className={styles.top}>
-        <span className={styles.dragHandle} {...listeners} {...attributes} title="Drag to reorder">
+      <div className={styles.top} {...listeners} {...attributes}>
+        <span className={styles.dragHandle} title="Drag to reorder or drag to timer">
           <GripVertical size={14} />
         </span>
         <span
@@ -64,12 +76,22 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
           onClick={() => onOpen(task)}
           title="Edit task"
         >
-          <Pencil size={12} />
+          <Pencil size={12} color="#ffffff" />
         </button>
         <span className={`${styles.tag} ${task.source === "ai-suggested" ? styles.tagAi : ""}`}>
           {task.source === "ai-suggested" && !task.aiAccepted ? "AI suggested" : task.status}
         </span>
       </div>
+
+      {task.labels && task.labels.length > 0 && (
+        <div className={styles.labelRow}>
+          {task.labels.map((lbl) => (
+            <span key={lbl} className={styles.labelChip}>
+              {lbl}
+            </span>
+          ))}
+        </div>
+      )}
 
       {task.source === "ai-suggested" && !task.aiAccepted && (
         <button
@@ -85,22 +107,50 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
 
       <BudgetBar totalTrackedSeconds={task.totalTrackedSeconds} estimateMinutes={task.estimateMinutes} />
 
-      <div className={styles.progressRow}>
-        <input
-          className={styles.progressInput}
-          type="range"
-          min={0}
-          max={100}
-          value={progress}
-          onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-          onChange={(e) => setProgress(Number(e.target.value))}
-          onPointerUp={() => commitProgress(progress)}
-          onKeyUp={() => commitProgress(progress)}
-        />
-        <span className={styles.progressPct}>{progress}%</span>
+      <div className={styles.estimateRow}>
+        <span className={styles.estimateLabel}>Expected time</span>
+        <div className={styles.estimateControls}>
+          <button
+            type="button"
+            className={styles.estAdjBtn}
+            title="Subtract 15 mins"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => handleAdjustEstimate(-15)}
+          >
+            -15m
+          </button>
+          <input
+            type="number"
+            min={5}
+            max={1440}
+            step={5}
+            className={styles.estimateInput}
+            value={estMinutes}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onChange={(e) => setEstMinutes(Number(e.target.value))}
+            onBlur={() => commitEstimate(estMinutes)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                commitEstimate(estMinutes);
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            title="Expected duration in minutes"
+          />
+          <span className={styles.estUnit}>min</span>
+          <button
+            type="button"
+            className={styles.estAdjBtn}
+            title="Add 15 mins"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => handleAdjustEstimate(15)}
+          >
+            +15m
+          </button>
+        </div>
       </div>
 
       <div className={styles.metaRow}>

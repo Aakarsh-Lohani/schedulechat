@@ -2,13 +2,28 @@
 
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { X, Plus, Calendar, CalendarClock, LayoutDashboard } from "lucide-react";
-import { useCreateTab, useDeleteTab, useTabs, useTasks } from "@/lib/api/hooks";
+import { X, Plus, Calendar, CalendarClock, LayoutDashboard, GripVertical } from "lucide-react";
+import { useCreateTab, useDeleteTab, useUpdateTab, useTabs, useTasks } from "@/lib/api/hooks";
 import { useUIStore } from "@/lib/store/uiStore";
 import type { BoardView } from "@/lib/store/uiStore";
 import styles from "./TabNav.module.scss";
 
-function NavItem({ id, label, active, onClick, droppableId, showDelete, onDelete }: {
+function NavItem({
+  id,
+  label,
+  active,
+  onClick,
+  droppableId,
+  showDelete,
+  onDelete,
+  draggable,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  isDragging,
+  isDragOver,
+}: {
   id: string;
   label: React.ReactNode;
   active: boolean;
@@ -16,10 +31,24 @@ function NavItem({ id, label, active, onClick, droppableId, showDelete, onDelete
   droppableId?: string;
   showDelete?: boolean;
   onDelete?: () => void;
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: () => void;
+  onDrop?: (e: React.DragEvent) => void;
+  isDragging?: boolean;
+  isDragOver?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: droppableId ?? `nav:${id}`, disabled: !droppableId });
   return (
-    <div className={styles.tabWrapper}>
+    <div
+      className={`${styles.tabWrapper} ${isDragging ? styles.isDragging : ""} ${isDragOver ? styles.dragOver : ""}`}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <button
         ref={droppableId ? setNodeRef : undefined}
         type="button"
@@ -50,11 +79,14 @@ function NavItem({ id, label, active, onClick, droppableId, showDelete, onDelete
 export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: (v: BoardView) => void }) {
   const { data: tabs } = useTabs();
   const createTab = useCreateTab();
+  const updateTab = useUpdateTab();
   const deleteTab = useDeleteTab();
   const { chatPanelOpen, toggleChatPanel } = useUIStore();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
+  const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
 
   // Fetch tasks only for the specific tab being deleted to check if empty
   const tabToDelete = tabs?.find((t) => t.id === confirmDeleteId);
@@ -76,13 +108,30 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
 
   function confirmDelete() {
     if (!confirmDeleteId) return;
-    if (isCheckingTasks || !tabTasks || tabTasks.length > 0) {
-      alert("Move or delete all tasks from this tab before deleting it.");
-      return;
-    }
     deleteTab.mutate(confirmDeleteId);
     if (view === confirmDeleteId) onChangeView("today");
     setConfirmDeleteId(null);
+  }
+
+  function handleTabDrop(targetTabId: string) {
+    if (!draggedTabId || draggedTabId === targetTabId || !tabs) {
+      setDraggedTabId(null);
+      setDragOverTabId(null);
+      return;
+    }
+    const draggedTab = tabs.find((t) => t.id === draggedTabId);
+    const targetTab = tabs.find((t) => t.id === targetTabId);
+    if (!draggedTab || !targetTab) {
+      setDraggedTabId(null);
+      setDragOverTabId(null);
+      return;
+    }
+
+    // Swap orders
+    updateTab.mutate({ id: draggedTab.id, order: targetTab.order });
+    updateTab.mutate({ id: targetTab.id, order: draggedTab.order });
+    setDraggedTabId(null);
+    setDragOverTabId(null);
   }
 
   return (
@@ -99,18 +148,47 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
         onClick={() => onChangeView("dashboard")}
       />
       <NavItem id="today" label="Today's Tasks" active={view === "today"} onClick={() => onChangeView("today")} droppableId="today" />
-      {tabs?.map((tab) => (
-        <NavItem
-          key={tab.id}
-          id={tab.id}
-          label={tab.name}
-          active={view === tab.id}
-          onClick={() => onChangeView(tab.id)}
-          droppableId={`tab:${tab.id}`}
-          showDelete={tab.name !== "Projects"}
-          onDelete={() => handleDeleteTab(tab.id)}
-        />
-      ))}
+      {tabs?.map((tab) => {
+        const isPrimary = tab.name === "Projects" || tab.isSystemDefault;
+        return (
+          <NavItem
+            key={tab.id}
+            id={tab.id}
+            label={
+              <>
+                <GripVertical size={11} style={{ opacity: 0.4, cursor: "grab" }} />
+                <span>{tab.name}</span>
+                {isPrimary && <span className={styles.primaryBadge}>Primary</span>}
+              </>
+            }
+            active={view === tab.id}
+            onClick={() => onChangeView(tab.id)}
+            droppableId={`tab:${tab.id}`}
+            showDelete={true}
+            onDelete={() => handleDeleteTab(tab.id)}
+            draggable={true}
+            onDragStart={(e) => {
+              e.dataTransfer.setData("text/tab-id", tab.id);
+              setDraggedTabId(tab.id);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (draggedTabId && draggedTabId !== tab.id) {
+                setDragOverTabId(tab.id);
+              }
+            }}
+            onDragLeave={() => {
+              if (dragOverTabId === tab.id) setDragOverTabId(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleTabDrop(tab.id);
+            }}
+            isDragging={draggedTabId === tab.id}
+            isDragOver={dragOverTabId === tab.id}
+          />
+        );
+      })}
       <NavItem
         id="calendar"
         label={
@@ -174,7 +252,7 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
                 type="button"
                 className={styles.confirmDeleteBtn}
                 onClick={confirmDelete}
-                disabled={isCheckingTasks || !tabTasks || tabTasks.length > 0}
+                disabled={isCheckingTasks}
               >
                 Delete
               </button>

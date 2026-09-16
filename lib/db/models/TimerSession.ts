@@ -3,7 +3,8 @@ import { Schema, model, models, type InferSchemaType, type Model } from "mongoos
 const TimerSessionSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    taskId: { type: Schema.Types.ObjectId, ref: "Task", required: true, index: true },
+    taskId: { type: Schema.Types.ObjectId, ref: "Task", required: false, index: true, default: null },
+    scheduledTaskId: { type: Schema.Types.ObjectId, ref: "ScheduledTask", required: false, index: true, default: null },
     slot: { type: Number, enum: [1, 2], required: true },
 
     startedAt: { type: Date, required: true },
@@ -19,8 +20,13 @@ const TimerSessionSchema = new Schema(
 
 TimerSessionSchema.index({ userId: 1, slot: 1, status: 1 });
 TimerSessionSchema.index({ userId: 1, taskId: 1, status: 1 });
+TimerSessionSchema.index({ userId: 1, scheduledTaskId: 1, status: 1 });
 
 export type TimerSessionDoc = InferSchemaType<typeof TimerSessionSchema> & { _id: Schema.Types.ObjectId };
+
+if (models.TimerSession && !models.TimerSession.schema.path("scheduledTaskId")) {
+  delete models.TimerSession;
+}
 
 export const TimerSession: Model<TimerSessionDoc> =
   (models.TimerSession as Model<TimerSessionDoc>) || model<TimerSessionDoc>("TimerSession", TimerSessionSchema);

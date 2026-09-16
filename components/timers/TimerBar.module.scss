@@ -142,6 +142,45 @@
   }
 }
 
+.scheduledApproval {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(167, 139, 250, 0.12);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 6px;
+  padding: 2px 5px;
+}
+
+.approvalPrompt {
+  font-size: 10px;
+  color: t.$accent-ai;
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+.approveBtn {
+  background: rgba(52, 211, 153, 0.15) !important;
+  color: #34d399 !important;
+  border-color: rgba(52, 211, 153, 0.3) !important;
+  font-weight: 600;
+
+  &:hover {
+    background: rgba(52, 211, 153, 0.3) !important;
+  }
+}
+
+.rejectBtn {
+  background: rgba(240, 96, 90, 0.15) !important;
+  color: #f87171 !important;
+  border-color: rgba(240, 96, 90, 0.3) !important;
+  font-weight: 600;
+
+  &:hover {
+    background: rgba(240, 96, 90, 0.3) !important;
+  }
+}
+
 .today {
   display: flex;
   flex-direction: column;
