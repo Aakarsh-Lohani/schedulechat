@@ -7,9 +7,10 @@ import type { RealtimeEventType } from "@/lib/realtime/emitter";
 const EVENT_TO_QUERY_KEYS: Record<RealtimeEventType, string[][]> = {
   "task-updated": [["tasks"], ["calendar-tasks"]],
   "tabs-updated": [["tabs"]],
-  "timer-changed": [["timers", "active"], ["tasks"], ["calendar-tasks"]],
+  "timer-changed": [["timers", "active"], ["tasks"], ["calendar-tasks"], ["notifications"]],
   "ai-action-executed": [["tasks"], ["calendar-tasks"], ["timers", "active"], ["ai-actions"], ["tabs"]],
   "ai-action-undone": [["tasks"], ["calendar-tasks"], ["timers", "active"], ["ai-actions"], ["tabs"]],
+  "notifications-updated": [["notifications"], ["timers", "active"], ["analytics"]],
 };
 
 const ALL_SYNC_QUERY_KEYS: string[][] = [
@@ -18,6 +19,7 @@ const ALL_SYNC_QUERY_KEYS: string[][] = [
   ["tabs"],
   ["timers", "active"],
   ["ai-actions"],
+  ["notifications"],
 ];
 
 const MAX_CONSECUTIVE_FAILURES = 5;

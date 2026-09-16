@@ -65,8 +65,10 @@ export async function GET(req: Request) {
 
   const tasks = candidateTasks.filter((t) => !t.tabId || activeTabIds.has(String(t.tabId)));
   const validTaskIds = new Set(tasks.map((t) => String(t._id)));
-  // Filter sessions to only those associated with active (non-archived, non-deleted) tasks
-  const validSessions = sessions.filter((s) => validTaskIds.has(String(s.taskId)));
+  // Filter sessions to only those associated with active tasks or scheduled tasks
+  const validSessions = sessions.filter(
+    (s) => validTaskIds.has(String(s.taskId)) || (Boolean(s.scheduledTaskId) && (s.contributedSeconds ?? 0) > 0)
+  );
 
   let todaySeconds = 0;
   let thisWeekSeconds = 0;

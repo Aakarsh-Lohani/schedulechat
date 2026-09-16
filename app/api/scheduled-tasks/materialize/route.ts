@@ -17,78 +17,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   }
 
-  const body = await req.json().catch(() => ({}));
-  const tzOffsetMinutes = typeof body?.tzOffsetMinutes === "number" ? body.tzOffsetMinutes : new Date().getTimezoneOffset();
-
-  await connectDB();
-
-  // Compute client-relative today window
-  const nowUtcMs = Date.now();
-  const clientLocalTimeMs = nowUtcMs - tzOffsetMinutes * 60 * 1000;
-  const clientDate = new Date(clientLocalTimeMs);
-
-  const startOfToday = new Date(
-    Date.UTC(clientDate.getUTCFullYear(), clientDate.getUTCMonth(), clientDate.getUTCDate()) +
-      tzOffsetMinutes * 60 * 1000
-  );
-  const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000 - 1);
-
-  // Fetch all enabled scheduled tasks for the user
-  const scheduledTasks = await ScheduledTask.find({ userId, enabled: true }).lean();
-  if (scheduledTasks.length === 0) {
-    return NextResponse.json({ materializedCount: 0, tasks: [] });
-  }
-
-  const materializedTasks = [];
-
-  for (const st of scheduledTasks) {
-    const occursToday = doesRRuleOccurOnDate(
-      st.recurrenceRule,
-      clientDate,
-      st.createdAt ? new Date(st.createdAt) : undefined
-    );
-    if (!occursToday) continue;
-
-    // Check if task already exists for today by scheduledTaskId or matching title today
-    const existing = await Task.findOne({
-      userId,
-      $or: [
-        { scheduledTaskId: st._id, scheduledDate: { $gte: startOfToday, $lte: endOfToday } },
-        { title: st.title, scheduledDate: { $gte: startOfToday, $lte: endOfToday } },
-      ],
-      status: { $ne: "archived" },
-    });
-
-    if (!existing) {
-      const doc = await Task.create({
-        userId,
-        tabId: null,
-        title: st.title,
-        description: st.description || "",
-        source: "manual",
-        aiAccepted: true,
-        status: "not-started",
-        estimateMinutes: st.durationMinutes,
-        defaultTimerMinutes: st.durationMinutes,
-        scheduledDate: startOfToday,
-        scheduledTaskId: st._id,
-      });
-
-      materializedTasks.push({
-        id: String(doc._id),
-        title: doc.title,
-        estimateMinutes: doc.estimateMinutes,
-        scheduledDate: doc.scheduledDate?.toISOString() ?? null,
-      });
-    }
-  }
-
-  if (materializedTasks.length > 0) {
-    emit(userId, { type: "task-updated" });
-  }
-
+  // Decommissioned: Scheduled tasks remain isolated and no longer materialize as Task cards
   return NextResponse.json({
-    materializedCount: materializedTasks.length,
-    tasks: materializedTasks,
+    materializedCount: 0,
+    tasks: [],
   });
 }

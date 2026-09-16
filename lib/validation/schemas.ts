@@ -41,10 +41,15 @@ export const updateTaskSchema = z.object({
   aiAccepted: z.boolean().optional(),
 });
 
-export const startTimerSchema = z.object({
-  taskId: objectIdString,
-  slot: z.union([z.literal(1), z.literal(2)]),
-});
+export const startTimerSchema = z
+  .object({
+    taskId: objectIdString.optional(),
+    scheduledTaskId: objectIdString.optional(),
+    slot: z.union([z.literal(1), z.literal(2)]),
+  })
+  .refine((data) => data.taskId || data.scheduledTaskId, {
+    message: "Either taskId or scheduledTaskId must be provided",
+  });
 
 export const extendTimerSchema = z.object({
   seconds: z.number().min(1).max(4 * 60 * 60),

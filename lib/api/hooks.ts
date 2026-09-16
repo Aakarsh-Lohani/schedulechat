@@ -133,11 +133,12 @@ export function useActiveTimers() {
 export function useStartTimer() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { taskId: string; slot: 1 | 2 }) =>
+    mutationFn: (input: { taskId?: string; scheduledTaskId?: string; slot: 1 | 2 }) =>
       apiFetch("/api/timers/start", { method: "POST", body: JSON.stringify(input) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["timers", "active"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }
@@ -383,6 +384,54 @@ export function useAnalytics(tzOffset?: number) {
     queryKey: ["analytics", offset],
     queryFn: () => apiFetch<AnalyticsDataDTO>(`/api/analytics?tzOffset=${offset}`),
     refetchInterval: 60000,
+  });
+}
+
+// ---- Notifications ----
+
+export interface NotificationDTO {
+  id: string;
+  scheduledTaskId: string;
+  title: string;
+  description?: string;
+  date: string;
+  startTime: string;
+  durationMinutes: number;
+  status: "pending" | "approved" | "rejected" | "dismissed";
+  timerSessionId?: string | null;
+  createdAt: string;
+}
+
+export function useNotifications() {
+  const tzOffset = new Date().getTimezoneOffset();
+  return useQuery({
+    queryKey: ["notifications", tzOffset],
+    queryFn: () => apiFetch<{ notifications: NotificationDTO[] }>(`/api/notifications?tzOffset=${tzOffset}`),
+    refetchInterval: 15000,
+  });
+}
+
+export function useNotificationAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      action,
+      slot,
+    }: {
+      id: string;
+      action: "approve" | "reject" | "start" | "dismiss";
+      slot?: 1 | 2;
+    }) =>
+      apiFetch<{ ok: boolean; status?: string }>(`/api/notifications/${id}/action`, {
+        method: "POST",
+        body: JSON.stringify({ action, slot }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["timers", "active"] });
+      qc.invalidateQueries({ queryKey: ["analytics"] });
+    },
   });
 }
 

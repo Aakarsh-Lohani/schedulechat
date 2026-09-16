@@ -4,9 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   useScheduledTasks,
   useStartTimer,
-  useTasks,
-  useCreateTask,
-  useTabs,
   useActiveTimers,
 } from "@/lib/api/hooks";
 import { doesRRuleOccurOnDate } from "@/lib/calendar/recurrence";
@@ -14,11 +11,8 @@ import type { AlarmItem } from "@/components/scheduled/AlarmDialog";
 
 export function useScheduledTaskAlarms() {
   const { data: scheduledTasks } = useScheduledTasks();
-  const { data: todayTasks } = useTasks({}, "today");
-  const { data: tabs } = useTabs();
   const { data: activeTimers } = useActiveTimers();
   const startTimer = useStartTimer();
-  const createTask = useCreateTask();
 
   const [activeAlarm, setActiveAlarm] = useState<AlarmItem | null>(null);
 
@@ -33,14 +27,7 @@ export function useScheduledTaskAlarms() {
     }
   }, []);
 
-  // Materialize today's scheduled tasks on mount and date changes
-  useEffect(() => {
-    fetch("/api/scheduled-tasks/materialize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tzOffsetMinutes: new Date().getTimezoneOffset() }),
-    }).catch(() => {});
-  }, []);
+  // Removed materialize: scheduled tasks stay strictly in Scheduled Tasks view
 
   useEffect(() => {
     if (!scheduledTasks || scheduledTasks.length === 0) return;
@@ -75,19 +62,14 @@ export function useScheduledTaskAlarms() {
         if (nowMins === taskStartMins && !alertedRef.current.has(alarmKey)) {
           alertedRef.current.add(alarmKey);
 
-          // Find if there's already a materialized task in Today's tasks
-          const matchingTodayTask = todayTasks?.find(
-            (t) => t.title.toLowerCase() === task.title.toLowerCase()
-          );
-
           // Check if either slot is idle
           const slot1Free = !activeTimers?.slots["1"];
           const slot2Free = !activeTimers?.slots["2"];
           const availableSlot: 1 | 2 | null = slot1Free ? 1 : slot2Free ? 2 : null;
 
-          // If a slot is free and we have a task ID, automatically start the timer!
-          if (availableSlot && matchingTodayTask) {
-            startTimer.mutate({ taskId: matchingTodayTask.id, slot: availableSlot });
+          // If a slot is free, automatically start the timer for this scheduled task!
+          if (availableSlot) {
+            startTimer.mutate({ scheduledTaskId: task.id, slot: availableSlot });
 
             if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
               try {
@@ -102,7 +84,7 @@ export function useScheduledTaskAlarms() {
             return;
           }
 
-          // If both slots are occupied or task is not yet found, show interactive dialog
+          // If both slots are occupied, show interactive alarm dialog
           setActiveAlarm({
             id: task.id,
             title: task.title,
@@ -110,7 +92,6 @@ export function useScheduledTaskAlarms() {
             startTime: task.startTime,
             durationMinutes: task.durationMinutes,
             type: "alarm",
-            taskId: matchingTodayTask?.id,
           });
 
           if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
@@ -164,32 +145,10 @@ export function useScheduledTaskAlarms() {
     checkAlarms();
     const interval = setInterval(checkAlarms, 10000);
     return () => clearInterval(interval);
-  }, [scheduledTasks, todayTasks, activeTimers?.slots, startTimer]);
+  }, [scheduledTasks, activeTimers?.slots, startTimer]);
 
   async function handleStartInSlot(slot: 1 | 2, item: AlarmItem) {
-    let taskId = item.taskId;
-
-    // If no existing task, create a quick task in today's tasks
-    const defaultTabId = tabs?.[0]?.id;
-    if (!taskId && defaultTabId) {
-      try {
-        const res = await createTask.mutateAsync({
-          tabId: defaultTabId,
-          title: item.title,
-          estimateMinutes: item.durationMinutes,
-          scheduledDate: new Date().toISOString(),
-          status: "in-progress",
-        });
-        taskId = res.task.id;
-      } catch {
-        // failed to create
-      }
-    }
-
-    if (taskId) {
-      startTimer.mutate({ taskId, slot });
-    }
-
+    startTimer.mutate({ scheduledTaskId: item.id, slot });
     setActiveAlarm(null);
   }
 

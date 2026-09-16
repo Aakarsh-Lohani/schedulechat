@@ -25,20 +25,19 @@ export async function GET(req: Request) {
 
   await connectDB();
 
-  // Ensure any scheduled tasks do not have a tabId pointing to a project tab
-  await Task.updateMany(
-    {
-      userId,
-      $or: [{ scheduledTaskId: { $ne: null } }, { title: { $regex: /^Daily Standup/i } }],
-      tabId: { $ne: null },
-    },
-    { $set: { tabId: null } }
-  );
+  // Clean up any stale materialized tasks from scheduled tasks so they never pollute Task boards
+  await Task.deleteMany({
+    userId,
+    $or: [{ scheduledTaskId: { $ne: null } }, { title: { $regex: /^Daily Standup/i } }],
+  });
 
-  const query: Record<string, unknown> = { userId, status: { $ne: "archived" } };
+  const query: Record<string, unknown> = {
+    userId,
+    status: { $ne: "archived" },
+    scheduledTaskId: null,
+  };
   if (tabId) {
     query.tabId = tabId;
-    query.scheduledTaskId = null;
   }
   if (scheduledToday) {
     const tzOffsetParam = url.searchParams.get("tzOffset");

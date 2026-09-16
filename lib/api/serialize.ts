@@ -19,7 +19,8 @@ interface LeanTaskLike {
 
 interface LeanTimerSessionLike {
   _id: unknown;
-  taskId: unknown;
+  taskId?: unknown;
+  scheduledTaskId?: unknown;
   slot: number;
   startedAt: Date;
   countdownEndsAt?: Date | null;
@@ -53,7 +54,7 @@ export function serializeTask(t: LeanTaskLike) {
 export function serializeSession(s: LeanTimerSessionLike) {
   return {
     id: String(s._id),
-    taskId: String(s.taskId),
+    taskId: s.taskId ? String(s.taskId) : s.scheduledTaskId ? String(s.scheduledTaskId) : "",
     slot: s.slot,
     startedAt: s.startedAt,
     countdownEndsAt: s.countdownEndsAt,
