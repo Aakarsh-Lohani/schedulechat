@@ -67,8 +67,8 @@ function taskQueryString(filter: TaskFilter): string {
 }
 
 export function useTasks(
-  filter: TaskFilter,
-  queryKeySuffix: string,
+  filter: TaskFilter = {},
+  queryKeySuffix: string = "all",
   options?: { enabled?: boolean }
 ) {
   return useQuery({

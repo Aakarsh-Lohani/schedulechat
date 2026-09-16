@@ -122,6 +122,47 @@
   }
 }
 
+.recommendedContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.recommendedTitle {
+  font-size: 10px;
+  color: t.$text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 600;
+}
+
+.recommendedChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.recommendedChip {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed t.$border-subtle;
+  color: t.$text-muted;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(167, 139, 250, 0.12);
+    border-color: t.$accent-ai;
+    color: t.$accent-ai;
+  }
+}
+
 .actions {
   display: flex;
   justify-content: space-between;

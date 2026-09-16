@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useCreateTask, useTabs, useUpdateTask } from "@/lib/api/hooks";
+import { useMemo, useState } from "react";
+import { useCreateTask, useTabs, useTasks, useUpdateTask } from "@/lib/api/hooks";
 import type { TaskDTO } from "@/lib/api/types";
 import styles from "./TaskModal.module.scss";
 
@@ -23,6 +23,7 @@ function toDatetimeLocalValue(iso: string | null | undefined): string {
 
 export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }: Props) {
   const { data: tabs } = useTabs();
+  const { data: allTasks } = useTasks();
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
 
@@ -39,6 +40,23 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
   );
   const [labels, setLabels] = useState<string[]>(task?.labels ?? []);
   const [labelInput, setLabelInput] = useState("");
+
+  // Extract all unique labels across all existing tasks
+  const allUniqueLabels = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of allTasks ?? []) {
+      for (const l of t.labels ?? []) {
+        const trimmed = l.trim();
+        if (trimmed) set.add(trimmed);
+      }
+    }
+    return Array.from(set).sort();
+  }, [allTasks]);
+
+  // Labels available to recommend that aren't already attached to this task
+  const recommendedLabels = useMemo(() => {
+    return allUniqueLabels.filter((lbl) => !labels.includes(lbl));
+  }, [allUniqueLabels, labels]);
 
   async function handleSave() {
     if (!title.trim() || !tabId) return;
@@ -185,7 +203,8 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
           <div className={styles.addLabelRow}>
             <input
               type="text"
-              placeholder="Add a label and press Enter..."
+              list="label-recommendations"
+              placeholder="Add a label or pick suggested..."
               value={labelInput}
               onChange={(e) => setLabelInput(e.target.value)}
               onKeyDown={(e) => {
@@ -199,6 +218,11 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
                 }
               }}
             />
+            <datalist id="label-recommendations">
+              {recommendedLabels.map((lbl) => (
+                <option key={lbl} value={lbl} />
+              ))}
+            </datalist>
             <button
               type="button"
               className={styles.addLabelBtn}
@@ -213,6 +237,29 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
               Add
             </button>
           </div>
+
+          {recommendedLabels.length > 0 && (
+            <div className={styles.recommendedContainer}>
+              <span className={styles.recommendedTitle}>Suggested labels:</span>
+              <div className={styles.recommendedChips}>
+                {recommendedLabels.map((lbl) => (
+                  <button
+                    key={lbl}
+                    type="button"
+                    className={styles.recommendedChip}
+                    onClick={() => {
+                      if (!labels.includes(lbl)) {
+                        setLabels([...labels, lbl]);
+                      }
+                    }}
+                    title={`Add label "${lbl}"`}
+                  >
+                    + {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <label className={styles.field}>
