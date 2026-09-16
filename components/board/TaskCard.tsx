@@ -38,7 +38,12 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
   }
 
   const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        zIndex: isDragging ? 9999 : undefined,
+        position: isDragging ? ("relative" as const) : undefined,
+        pointerEvents: isDragging ? ("none" as const) : undefined,
+      }
     : undefined;
 
   const scheduledLabel = task.scheduledDate
@@ -51,8 +56,8 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
       style={style}
       className={`${styles.card} ${isDragging ? styles.dragging : ""}`}
     >
-      <div className={styles.top}>
-        <span className={styles.dragHandle} {...listeners} {...attributes} title="Drag to reorder">
+      <div className={styles.top} {...listeners} {...attributes}>
+        <span className={styles.dragHandle} title="Drag to reorder or drag to timer">
           <GripVertical size={14} />
         </span>
         <span

@@ -45,6 +45,13 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
 
     const scheduledDateISO = scheduledDate ? new Date(scheduledDate).toISOString() : null;
 
+    // Automatically include any pending label input if the user didn't press Enter/Add
+    const finalLabels = [...labels];
+    const pendingLabel = labelInput.trim();
+    if (pendingLabel && !finalLabels.includes(pendingLabel)) {
+      finalLabels.push(pendingLabel);
+    }
+
     if (task) {
       await updateTask.mutateAsync({
         id: task.id,
@@ -55,7 +62,7 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
         defaultTimerMinutes,
         description,
         scheduledDate: scheduledDateISO,
-        labels,
+        labels: finalLabels,
       });
     } else {
       await createTask.mutateAsync({
@@ -66,7 +73,7 @@ export function TaskModal({ task, defaultTabId, defaultScheduledDate, onClose }:
         defaultTimerMinutes,
         description,
         scheduledDate: scheduledDateISO,
-        labels,
+        labels: finalLabels,
       });
     }
     onClose();

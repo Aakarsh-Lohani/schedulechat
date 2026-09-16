@@ -135,7 +135,10 @@ export function useStartTimer() {
   return useMutation({
     mutationFn: (input: { taskId: string; slot: 1 | 2 }) =>
       apiFetch("/api/timers/start", { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["timers", "active"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["timers", "active"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 }
 

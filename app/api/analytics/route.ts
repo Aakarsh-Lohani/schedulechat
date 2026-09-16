@@ -64,13 +64,16 @@ export async function GET(req: Request) {
   }).lean();
 
   const tasks = candidateTasks.filter((t) => !t.tabId || activeTabIds.has(String(t.tabId)));
+  const validTaskIds = new Set(tasks.map((t) => String(t._id)));
+  // Filter sessions to only those associated with active (non-archived, non-deleted) tasks
+  const validSessions = sessions.filter((s) => validTaskIds.has(String(s.taskId)));
 
   let todaySeconds = 0;
   let thisWeekSeconds = 0;
   let thisMonthSeconds = 0;
   let allTimeSeconds = 0;
 
-  for (const s of sessions) {
+  for (const s of validSessions) {
     const started = new Date(s.startedAt);
     const ended = s.actualEndedAt
       ? new Date(s.actualEndedAt)
@@ -105,7 +108,7 @@ export async function GET(req: Request) {
       const dayEnd = new Date(dayStart.getTime() + DAY_MS - 1);
 
       let dayActualSec = 0;
-      for (const s of sessions) {
+      for (const s of validSessions) {
         const started = new Date(s.startedAt);
         const ended = s.actualEndedAt
           ? new Date(s.actualEndedAt)
@@ -214,7 +217,7 @@ export async function GET(req: Request) {
     };
   });
 
-  for (const s of sessions) {
+  for (const s of validSessions) {
     const started = new Date(s.startedAt);
     const localStart = new Date(started.getTime() - tzOffsetMinutes * 60 * 1000);
     const hour = localStart.getUTCHours();

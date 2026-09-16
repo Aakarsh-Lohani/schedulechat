@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/connect";
 import { getCurrentUserId } from "@/lib/session";
 import { Task } from "@/lib/db/models/Task";
+import { TimerSession } from "@/lib/db/models/TimerSession";
 import { updateTaskSchema, objectIdString } from "@/lib/validation/schemas";
 import { emit } from "@/lib/realtime/emitter";
 import { serializeTask } from "@/lib/api/serialize";
@@ -40,7 +41,11 @@ export async function DELETE(_req: Request, { params: paramsPromise }: { params:
   const result = await Task.deleteOne({ _id: params.id, userId });
   if (result.deletedCount === 0) return NextResponse.json({ error: "Not found", code: "NOT_FOUND" }, { status: 404 });
 
+  // Delete all associated timer sessions for this deleted task
+  await TimerSession.deleteMany({ userId, taskId: params.id });
+
   emit(userId, { type: "task-updated" });
+  emit(userId, { type: "timer-changed" });
 
   return NextResponse.json({ ok: true });
 }
