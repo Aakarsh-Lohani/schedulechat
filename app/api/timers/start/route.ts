@@ -34,14 +34,14 @@ export async function POST(req: Request) {
     plannedDurationSeconds = scheduledTask.durationMinutes * 60;
   }
 
-  const slotBusy = await TimerSession.findOne({ userId, slot, status: { $in: ["countdown", "running"] } });
+  const slotBusy = await TimerSession.findOne({ userId, slot, status: { $in: ["countdown", "running", "paused"] } });
   if (slotBusy) {
     return NextResponse.json({ error: `Timer slot ${slot} is already in use`, code: "SLOT_BUSY" }, { status: 409 });
   }
 
   const taskActiveFilter = taskId
-    ? { userId, taskId, status: { $in: ["countdown", "running"] } }
-    : { userId, scheduledTaskId, status: { $in: ["countdown", "running"] } };
+    ? { userId, taskId, status: { $in: ["countdown", "running", "paused"] } }
+    : { userId, scheduledTaskId, status: { $in: ["countdown", "running", "paused"] } };
 
   const taskActiveElsewhere = await TimerSession.findOne(taskActiveFilter);
   if (taskActiveElsewhere) {

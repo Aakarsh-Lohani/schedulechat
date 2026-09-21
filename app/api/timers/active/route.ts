@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db/connect";
 import { getCurrentUserId } from "@/lib/session";
 import { TimerSession } from "@/lib/db/models/TimerSession";
 import { Task } from "@/lib/db/models/Task";
+import { ScheduledTask } from "@/lib/db/models/ScheduledTask";
 
 /**
  * Returns both timer slots' current session (if any) plus a derived "today total"
@@ -20,7 +21,7 @@ export async function GET() {
   const nowMs = Date.now();
 
   const [activeSessions, allCompletedSessions, activeTasks] = await Promise.all([
-    TimerSession.find({ userId, status: { $in: ["countdown", "running"] } })
+    TimerSession.find({ userId, status: { $in: ["countdown", "running", "paused"] } })
       .populate("taskId", "title defaultTimerMinutes scheduledTaskId")
       .populate("scheduledTaskId", "title durationMinutes")
       .lean(),
@@ -69,6 +70,8 @@ export async function GET() {
       countdownEndsAt: s.countdownEndsAt,
       plannedDurationSeconds: s.plannedDurationSeconds,
       extendedBySeconds: s.extendedBySeconds,
+      pausedAt: s.pausedAt ? s.pausedAt.toISOString() : null,
+      totalPausedSeconds: s.totalPausedSeconds ?? 0,
     };
   }
 
