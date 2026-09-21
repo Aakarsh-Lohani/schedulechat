@@ -9,11 +9,13 @@ const TimerSessionSchema = new Schema(
 
     startedAt: { type: Date, required: true },
     plannedDurationSeconds: { type: Number, required: true },
-    status: { type: String, enum: ["countdown", "running", "completed", "cancelled"], default: "countdown" },
+    status: { type: String, enum: ["countdown", "running", "paused", "completed", "cancelled"], default: "countdown" },
     countdownEndsAt: { type: Date, default: null },
     extendedBySeconds: { type: Number, default: 0 },
     actualEndedAt: { type: Date, default: null },
     contributedSeconds: { type: Number, default: 0 },
+    pausedAt: { type: Date, default: null },
+    totalPausedSeconds: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
@@ -24,7 +26,7 @@ TimerSessionSchema.index({ userId: 1, scheduledTaskId: 1, status: 1 });
 
 export type TimerSessionDoc = InferSchemaType<typeof TimerSessionSchema> & { _id: Schema.Types.ObjectId };
 
-if (models.TimerSession && !models.TimerSession.schema.path("scheduledTaskId")) {
+if (models.TimerSession && !models.TimerSession.schema.path("pausedAt")) {
   delete models.TimerSession;
 }
 

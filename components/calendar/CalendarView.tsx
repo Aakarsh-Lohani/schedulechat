@@ -94,18 +94,18 @@ export function CalendarView() {
 
   // Month boundary calculations
   const monthStart = useMemo(() => {
-    const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 20);
     d.setHours(0, 0, 0, 0);
     return d;
   }, [currentMonth]);
 
   const monthEnd = useMemo(() => {
-    const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 15);
     d.setHours(23, 59, 59, 999);
     return d;
   }, [currentMonth]);
 
-  // Query range covers either the viewed month or the week
+  // Query range covers either the viewed month (including padding) or the week
   const fromQuery = viewMode === "calendar" ? monthStart.toISOString() : weekStart.toISOString();
   const toQuery = viewMode === "calendar" ? monthEnd.toISOString() : weekEnd.toISOString();
 
@@ -184,21 +184,27 @@ export function CalendarView() {
     const map = new Map<string, { scheduled: TaskDTO[]; done: TaskDTO[] }>();
 
     for (const t of tasks ?? []) {
+      // Determine which date to place this task on
+      let dateStr: string | null = null;
+
       if (t.scheduledDate) {
-        const dStr = new Date(t.scheduledDate).toDateString();
-        const entry = map.get(dStr) ?? { scheduled: [], done: [] };
-        if (t.status === "done") {
-          entry.done.push(t);
-        } else {
-          entry.scheduled.push(t);
-        }
-        map.set(dStr, entry);
+        dateStr = new Date(t.scheduledDate).toDateString();
       } else if (t.status === "done" && t.endDate) {
-        const dStr = new Date(t.endDate).toDateString();
-        const entry = map.get(dStr) ?? { scheduled: [], done: [] };
-        entry.done.push(t);
-        map.set(dStr, entry);
+        dateStr = new Date(t.endDate).toDateString();
+      } else if (t.status === "done" && t.updatedAt) {
+        // Completed tasks without scheduledDate/endDate — use updatedAt (completion timestamp)
+        dateStr = new Date(t.updatedAt).toDateString();
       }
+
+      if (!dateStr) continue;
+
+      const entry = map.get(dateStr) ?? { scheduled: [], done: [] };
+      if (t.status === "done") {
+        entry.done.push(t);
+      } else {
+        entry.scheduled.push(t);
+      }
+      map.set(dateStr, entry);
     }
     return map;
   }, [tasks]);

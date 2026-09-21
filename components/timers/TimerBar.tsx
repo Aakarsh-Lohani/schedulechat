@@ -8,6 +8,8 @@ import {
   useCancelTimer,
   useConfirmStartTimer,
   useExtendTimer,
+  usePauseTimer,
+  useResumeTimer,
   useStopTimer,
 } from "@/lib/api/hooks";
 import { formatClock, formatDuration } from "@/lib/timers/budget";
@@ -37,6 +39,8 @@ function SlotView({
   const confirmStart = useConfirmStartTimer();
   const cancelTimer = useCancelTimer();
   const extendTimer = useExtendTimer();
+  const pauseTimer = usePauseTimer();
+  const resumeTimer = useResumeTimer();
   const stopTimer = useStopTimer();
   const { setNodeRef, isOver: isDropTarget } = useDroppable({
     id: `timer:${slot}`,
@@ -106,16 +110,28 @@ function SlotView({
     );
   }
 
-  const workElapsedSeconds = Math.max(0, (now - startedAtMs) / 1000 - COUNTDOWN_SECONDS);
+  const isPaused = session.status === "paused";
+  const totalPaused = session.totalPausedSeconds ?? 0;
+  const currentPauseDuration =
+    isPaused && session.pausedAt
+      ? Math.max(0, (now - new Date(session.pausedAt).getTime()) / 1000)
+      : 0;
+
+  const workElapsedSeconds = Math.max(
+    0,
+    (now - startedAtMs) / 1000 - COUNTDOWN_SECONDS - totalPaused - currentPauseDuration
+  );
   const plannedTotal = session.plannedDurationSeconds + session.extendedBySeconds;
   const remainingRunning = plannedTotal - workElapsedSeconds;
   const isOver = remainingRunning <= 0;
 
   return (
-    <div ref={setNodeRef} className={`${styles.slot} ${isOver ? styles.over : ""}`}>
+    <div ref={setNodeRef} className={`${styles.slot} ${isOver ? styles.over : ""} ${isPaused ? styles.paused : ""}`}>
       <div className={styles.ring} />
       <div className={styles.meta}>
-        <span className={styles.label}>Timer {slot}</span>
+        <span className={styles.label}>
+          Timer {slot} {isPaused && "· paused"}
+        </span>
         <span className={styles.taskName}>{session.taskTitle}</span>
         <span className={styles.value}>
           {isOver ? `+${formatClock(-remainingRunning)} over` : `${formatClock(remainingRunning)} remaining`}
@@ -148,6 +164,24 @@ function SlotView({
             +10m
           </button>
         )}
+        {session.status === "running" && (
+          <button
+            className={styles.miniBtn}
+            onClick={() => pauseTimer.mutate(session.id)}
+            title="Pause timer"
+          >
+            Pause
+          </button>
+        )}
+        {session.status === "paused" && (
+          <button
+            className={`${styles.miniBtn} ${styles.resumeBtn}`}
+            onClick={() => resumeTimer.mutate(session.id)}
+            title="Resume timer"
+          >
+            Resume
+          </button>
+        )}
         <button className={styles.miniBtn} onClick={() => stopTimer.mutate(session.id)}>
           Stop
         </button>
@@ -167,14 +201,20 @@ export function TimerBar() {
   if (data) {
     for (const key of ["1", "2"] as const) {
       const s = data.slots[key];
-      if (s && s.status === "running") {
+      if (s && (s.status === "running" || s.status === "paused")) {
         const startedAtMs = new Date(s.startedAt).getTime();
         const maxDurationSeconds = s.plannedDurationSeconds + s.extendedBySeconds;
+
+        const totalPaused = s.totalPausedSeconds ?? 0;
+        const currentPause =
+          s.status === "paused" && s.pausedAt
+            ? Math.max(0, (now - new Date(s.pausedAt).getTime()) / 1000)
+            : 0;
 
         // Total live elapsed across whole session, capped by planned duration + extensions
         const totalElapsed = Math.min(
           maxDurationSeconds,
-          Math.max(0, (now - startedAtMs) / 1000 - COUNTDOWN_SECONDS)
+          Math.max(0, (now - startedAtMs) / 1000 - COUNTDOWN_SECONDS - totalPaused - currentPause)
         );
         liveSecondsTotal += totalElapsed;
 
@@ -183,7 +223,7 @@ export function TimerBar() {
         const expectedEndMs = workStartMs + maxDurationSeconds * 1000;
         const actualEndMs = Math.min(now, expectedEndMs);
         const overlapStartMs = Math.max(workStartMs, todayMidnightMs);
-        const overlapMs = Math.max(0, actualEndMs - overlapStartMs);
+        const overlapMs = Math.max(0, actualEndMs - overlapStartMs - (totalPaused + currentPause) * 1000);
         liveSecondsToday += overlapMs / 1000;
       }
     }

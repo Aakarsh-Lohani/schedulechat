@@ -4,6 +4,8 @@ export interface BarSpanInput {
   startDate: string | null;
   endDate: string | null;
   scheduledDate: string | null;
+  updatedAt?: string | null;
+  status?: string;
 }
 
 export interface BarSpan {
@@ -19,8 +21,9 @@ export interface BarSpan {
  * outside the visible week.
  */
 export function computeBarSpan(task: BarSpanInput, weekStart: Date, weekEnd: Date): BarSpan | null {
-  const rawStart = task.startDate ?? task.scheduledDate;
-  const rawEnd = task.endDate ?? task.scheduledDate ?? task.startDate;
+  const completedDate = task.status === "done" && task.updatedAt ? task.updatedAt : null;
+  const rawStart = task.startDate ?? task.scheduledDate ?? completedDate;
+  const rawEnd = task.endDate ?? task.scheduledDate ?? task.startDate ?? completedDate;
   if (!rawStart || !rawEnd) return null;
 
   const start = new Date(rawStart);

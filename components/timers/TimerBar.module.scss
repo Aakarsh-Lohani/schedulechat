@@ -64,6 +64,9 @@
   &.over {
     border-color: t.$status-orange;
   }
+  &.paused {
+    border-color: rgba(251, 191, 36, 0.4);
+  }
   &.dropTarget {
     border-color: t.$accent-ai;
     box-shadow: 0 0 0 1px t.$accent-ai-dim;
@@ -139,6 +142,17 @@
 
   &:hover {
     color: t.$text-primary;
+  }
+}
+
+.resumeBtn {
+  background: rgba(251, 191, 36, 0.15) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(251, 191, 36, 0.3) !important;
+  font-weight: 600;
+
+  &:hover {
+    background: rgba(251, 191, 36, 0.25) !important;
   }
 }
 

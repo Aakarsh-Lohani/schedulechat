@@ -18,7 +18,7 @@ export async function POST(req: Request, { params: paramsPromise }: { params: Pr
   await connectDB();
   const session = await TimerSession.findOne({ _id: params.id, userId });
   if (!session) return NextResponse.json({ error: "Not found", code: "NOT_FOUND" }, { status: 404 });
-  if (session.status !== "running" && session.status !== "countdown") {
+  if (session.status !== "running" && session.status !== "countdown" && session.status !== "paused") {
     return NextResponse.json({ error: `Session is already ${session.status}`, code: "INVALID_STATE" }, { status: 409 });
   }
 
@@ -26,8 +26,16 @@ export async function POST(req: Request, { params: paramsPromise }: { params: Pr
   const isFollowed = body?.followed !== false && !body?.discardTime;
 
   const now = new Date();
+  let pausedDeduction = session.totalPausedSeconds ?? 0;
+  if (session.status === "paused" && session.pausedAt) {
+    pausedDeduction += Math.max(0, (now.getTime() - session.pausedAt.getTime()) / 1000);
+  }
+
   const rawElapsedSeconds = (now.getTime() - session.startedAt.getTime()) / 1000;
-  const calculatedContributed = session.status === "running" ? Math.max(0, Math.round(rawElapsedSeconds - COUNTDOWN_SECONDS)) : 0;
+  const calculatedContributed =
+    session.status === "running" || session.status === "paused"
+      ? Math.max(0, Math.round(rawElapsedSeconds - COUNTDOWN_SECONDS - pausedDeduction))
+      : 0;
   const contributedSeconds = isFollowed ? calculatedContributed : 0;
 
   session.status = isFollowed ? "completed" : "cancelled";

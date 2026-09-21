@@ -22,6 +22,7 @@ export interface TaskDTO {
   endDate: string | null;
   scheduledTaskId?: string | null;
   labels: string[];
+  updatedAt?: string | null;
   order: number;
 }
 
@@ -30,11 +31,13 @@ export interface TimerSlotDTO {
   taskId: string;
   taskTitle: string;
   isScheduledTask?: boolean;
-  status: "countdown" | "running";
+  status: "countdown" | "running" | "paused";
   startedAt: string;
   countdownEndsAt: string | null;
   plannedDurationSeconds: number;
   extendedBySeconds: number;
+  pausedAt?: string | null;
+  totalPausedSeconds?: number;
 }
 
 export interface ActiveTimersDTO {

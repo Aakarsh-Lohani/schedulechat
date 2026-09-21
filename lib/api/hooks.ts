@@ -168,6 +168,22 @@ export function useExtendTimer() {
   });
 }
 
+export function usePauseTimer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/timers/${id}/pause`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["timers", "active"] }),
+  });
+}
+
+export function useResumeTimer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/timers/${id}/resume`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["timers", "active"] }),
+  });
+}
+
 export function useStopTimer() {
   const qc = useQueryClient();
   return useMutation({
