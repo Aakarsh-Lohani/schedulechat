@@ -11,7 +11,7 @@ const GoalContextSchema = new Schema(
 - Weekdays (Mon–Fri): Max 8 hours/day
 - Weekends (Sat–Sun): Max 10 hours/day
 
-## Goals Roadmap (120 Days)
+## Goals Roadmap
 ### 1. DSA Mastery (Target: ~100 Hours)
 - Week 1-4: Arrays, Two Pointers, Sliding Window, Binary Search, HashMaps
 - Week 5-8: Linked Lists, Stacks, Queues, Binary Trees & BSTs, Heaps

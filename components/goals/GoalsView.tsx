@@ -86,7 +86,7 @@ export function GoalsView() {
         <div>
           <strong>How this works with your Copilot:</strong>
           <br />
-          <strong>Section 1</strong> defines your 120-day syllabus, goals, and daily time ceiling (Max 8h weekdays, 10h weekends).
+          <strong>Section 1</strong> defines your syllabus, goals, and daily time ceiling (Max 8h weekdays, 10h weekends).
           <br />
           <strong>Section 2</strong> is where the Copilot records its retrospective notes, pacing decisions, and rollover tasks at the end of each sprint.
           You can edit either section at any time.
@@ -129,7 +129,7 @@ export function GoalsView() {
                 className={styles.textarea}
                 value={userGoals}
                 onChange={(e) => handleUserGoalsChange(e.target.value)}
-                placeholder="List your 120-day goals, topic syllabus, and daily hours ceiling (e.g. 8h weekdays, 10h weekends)..."
+                placeholder="List your goals, topic syllabus, and daily hours ceiling (e.g. 8h weekdays, 10h weekends)..."
               />
             ) : (
               <div className={styles.previewArea}>

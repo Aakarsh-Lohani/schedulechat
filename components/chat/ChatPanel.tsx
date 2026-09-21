@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Sparkles,
@@ -13,6 +13,7 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronUp,
+  Zap,
 } from "lucide-react";
 import { useUIStore } from "@/lib/store/uiStore";
 import { MarkdownContent } from "./MarkdownContent";
@@ -93,6 +94,22 @@ export function ChatPanel() {
   const [liveStatus, setLiveStatus] = useState<string | null>(null);
   const [liveThinking, setLiveThinking] = useState<string>("");
   const [showThinking, setShowThinking] = useState(true);
+
+  // Special commands popover state
+  const [showCmdMenu, setShowCmdMenu] = useState(false);
+  const specialCmdRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (specialCmdRef.current && !specialCmdRef.current.contains(e.target as Node)) {
+        setShowCmdMenu(false);
+      }
+    }
+    if (showCmdMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showCmdMenu]);
 
   const { data: actions } = useAiActions();
   const approveAction = useApproveAction();
@@ -243,7 +260,7 @@ export function ChatPanel() {
   }
 
   const SPRINT_PROMPT =
-    "Review my Goals & Limits and any unfinished tasks from the past 7 days. Plan the next 7-day sprint: allocate tasks within my daily limits (max 8h weekdays, max 10h weekends), propose a batch of 5-8 focused tasks with specific scheduled dates across the upcoming 7 days, explain your assumptions, and propose updating the AI Sprint Log.";
+    "Review my Goals and any unfinished tasks from the past 7 days. Plan the next 7-day sprint: allocate tasks within my daily limits (max 8h weekdays, max 10h weekends), propose a batch of 5-8 focused tasks with specific scheduled dates across the upcoming 7 days, explain your assumptions, and propose updating the AI Sprint Log.";
 
   function handleTriggerSprint() {
     handleSend(SPRINT_PROMPT);
@@ -452,36 +469,59 @@ export function ChatPanel() {
       </div>
 
       <div className={styles.inputWrap}>
-        <div className={styles.quickActionsRow}>
-          <button
-            type="button"
-            className={styles.sprintBtn}
-            onClick={handleTriggerSprint}
-            disabled={isGenerating}
-            title="Plan the upcoming 7-day sprint using your Goals & Study Limits"
-          >
-            <CalendarClock size={13} />
-            <span>🚀 Plan Next 7-Day Sprint</span>
-          </button>
-        </div>
-
-        {/* Suggest / Update toggle and Model select positioned near text box */}
+        {/* Suggest / Update toggle, Special commands icon popover, and Model select */}
         <div className={styles.inputControlsRow}>
-          <div className={styles.modeToggle}>
-            <button
-              type="button"
-              className={`${styles.modeBtn} ${chatMode === "suggest" ? styles.active : ""}`}
-              onClick={() => setChatMode("suggest")}
-            >
-              Suggest
-            </button>
-            <button
-              type="button"
-              className={`${styles.modeBtn} ${chatMode === "update" ? styles.active : ""}`}
-              onClick={() => setChatMode("update")}
-            >
-              Update
-            </button>
+          <div className={styles.controlsLeft}>
+            <div className={styles.modeToggle}>
+              <button
+                type="button"
+                className={`${styles.modeBtn} ${chatMode === "suggest" ? styles.active : ""}`}
+                onClick={() => setChatMode("suggest")}
+              >
+                Suggest
+              </button>
+              <button
+                type="button"
+                className={`${styles.modeBtn} ${chatMode === "update" ? styles.active : ""}`}
+                onClick={() => setChatMode("update")}
+              >
+                Update
+              </button>
+            </div>
+
+            <div className={styles.specialCmdWrap} ref={specialCmdRef}>
+              <button
+                type="button"
+                className={`${styles.specialCmdBtn} ${showCmdMenu ? styles.active : ""}`}
+                onClick={() => setShowCmdMenu((v) => !v)}
+                title="Special commands"
+                aria-label="Special commands"
+              >
+                <Zap size={13} />
+              </button>
+              {showCmdMenu && (
+                <div className={styles.specialCmdMenu}>
+                  <div className={styles.specialCmdMenuHead}>Special Commands</div>
+                  <button
+                    type="button"
+                    className={styles.specialCmdItem}
+                    onClick={() => {
+                      setShowCmdMenu(false);
+                      handleTriggerSprint();
+                    }}
+                    disabled={isGenerating}
+                  >
+                    <div className={styles.cmdItemTitle}>
+                      <CalendarClock size={13} color="#a78bfa" />
+                      <span>🚀 Plan Next 7-Day Sprint</span>
+                    </div>
+                    <div className={styles.cmdItemDesc}>
+                      Review Goals & study limits, check unfinished tasks, and plan next 7 days.
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <select
