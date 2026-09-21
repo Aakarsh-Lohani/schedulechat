@@ -1,7 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, Check, X, Plus, Trash2, CalendarClock, Pencil, MessageSquare } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  Sparkles,
+  Check,
+  X,
+  Plus,
+  Trash2,
+  CalendarClock,
+  Pencil,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { useUIStore } from "@/lib/store/uiStore";
 import { MarkdownContent } from "./MarkdownContent";
 import {
@@ -13,7 +25,6 @@ import {
   useDeleteConversation,
   useUpdateConversationTitle,
   useRejectAction,
-  useSendChat,
   useUndoAction,
 } from "@/lib/api/hooks";
 import styles from "./ChatPanel.module.scss";
@@ -35,6 +46,10 @@ function getActionBadge(type: string) {
   switch (type) {
     case "create-task":
       return { label: "Create Task", icon: <Plus size={11} />, color: "#60a5fa" };
+    case "create-tasks-batch":
+      return { label: "Sprint Batch", icon: <Plus size={11} />, color: "#10b981" };
+    case "update-sprint-log":
+      return { label: "Sprint Log", icon: <Sparkles size={11} />, color: "#a78bfa" };
     case "update-task":
       return { label: "Update Task", icon: <Pencil size={11} />, color: "#f5a623" };
     case "delete-task":
@@ -49,6 +64,7 @@ function getActionBadge(type: string) {
 }
 
 export function ChatPanel() {
+  const qc = useQueryClient();
   const { chatMode, setChatMode, copilotWidth, setCopilotWidth } = useUIStore();
   const { data: conversations } = useConversations();
   const createConvo = useCreateConversation();
@@ -72,7 +88,12 @@ export function ChatPanel() {
   const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
   const [isResizing, setIsResizing] = useState(false);
 
-  const sendChat = useSendChat();
+  // Live thinking & streaming progress state
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [liveStatus, setLiveStatus] = useState<string | null>(null);
+  const [liveThinking, setLiveThinking] = useState<string>("");
+  const [showThinking, setShowThinking] = useState(true);
+
   const { data: actions } = useAiActions();
   const approveAction = useApproveAction();
   const rejectAction = useRejectAction();
@@ -133,33 +154,99 @@ export function ChatPanel() {
     setIsEditingTitle(false);
   }
 
-  async function handleSend() {
-    const text = input.trim();
-    if (!text || sendChat.isPending) return;
-    setInput("");
+  async function handleSend(customText?: string) {
+    const text = (customText ?? input).trim();
+    if (!text || isGenerating) return;
+    if (!customText) setInput("");
     setNewMessages((m) => [...m, { role: "user", content: text }]);
+    setIsGenerating(true);
+    setLiveStatus("Starting Copilot reasoning...");
+    setLiveThinking("");
+    setShowThinking(true);
+
     try {
-      const result = await sendChat.mutateAsync({
-        message: text,
-        mode: chatMode,
-        model: selectedModel,
-        conversationId: activeConversationId,
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          mode: chatMode,
+          model: selectedModel,
+          conversationId: activeConversationId,
+          stream: true,
+        }),
       });
-      if (result.conversationId && result.conversationId !== activeConversationId) {
-        setActiveConversationId(result.conversationId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
       }
-      setNewMessages((m) => [...m, { role: "assistant", content: result.reply }]);
+
+      if (!response.body) {
+        throw new Error("No response stream available");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalReply = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === "status") {
+              setLiveStatus(data.text);
+            } else if (data.type === "thinking") {
+              setLiveThinking((prev) => prev + (prev ? "\n" : "") + data.text);
+            } else if (data.type === "done") {
+              finalReply = data.reply;
+              if (data.conversationId && data.conversationId !== activeConversationId) {
+                setActiveConversationId(data.conversationId);
+              }
+              qc.invalidateQueries({ queryKey: ["ai-actions"] });
+              qc.invalidateQueries({ queryKey: ["conversations"] });
+              qc.invalidateQueries({ queryKey: ["goal-context"] });
+            } else if (data.type === "error") {
+              throw new Error(data.error);
+            }
+          } catch {
+            // Ignore partial parse errors
+          }
+        }
+      }
+
+      if (finalReply) {
+        setNewMessages((m) => [...m, { role: "assistant", content: finalReply }]);
+      }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Failed to communicate with Copilot";
-      setInput(text);
+      if (!customText) setInput(text);
       setNewMessages((m) => [
         ...m,
         {
           role: "assistant",
-          content: `Copilot request failed: ${errorMsg}. Your prompt has been restored. Please check your connection or AI provider key and try again.`,
+          content: `Copilot request failed: ${errorMsg}. Your prompt has been restored. Please try again.`,
         },
       ]);
+    } finally {
+      setIsGenerating(false);
+      setLiveStatus(null);
     }
+  }
+
+  const SPRINT_PROMPT =
+    "Review my Goals & Limits and any unfinished tasks from the past 7 days. Plan the next 7-day sprint: allocate tasks within my daily limits (max 8h weekdays, max 10h weekends), propose a batch of 5-8 focused tasks with specific scheduled dates across the upcoming 7 days, explain your assumptions, and propose updating the AI Sprint Log.";
+
+  function handleTriggerSprint() {
+    handleSend(SPRINT_PROMPT);
   }
 
   const proposed = (actions ?? []).filter((a) => a.status === "proposed");
@@ -235,16 +322,19 @@ export function ChatPanel() {
                 type="button"
                 className={styles.newChatBtn}
                 onClick={handleNewChat}
-                title="Start new conversation"
+                disabled={createConvo.isPending}
+                title="Start a new conversation"
               >
-                <Plus size={12} /> New
+                <Plus size={13} />
+                <span>New</span>
               </button>
 
               {activeConversationId && (
                 <button
                   type="button"
-                  className={styles.delChatBtn}
+                  className={styles.deleteChatBtn}
                   onClick={() => handleDeleteConvo(activeConversationId)}
+                  disabled={deleteConvo.isPending}
                   title="Delete conversation"
                 >
                   <Trash2 size={13} />
@@ -265,6 +355,12 @@ export function ChatPanel() {
 
         {proposed.map((action) => {
           const badge = getActionBadge(action.type);
+          const rawPayload = action.proposedPayload as Record<string, unknown> | undefined;
+          const batchTasks =
+            action.type === "create-tasks-batch" && Array.isArray(rawPayload?.tasks)
+              ? (rawPayload.tasks as Array<{ title: string; scheduledDate?: string; estimateMinutes?: number }>)
+              : null;
+
           return (
             <div key={action.id} className={styles.approvalCard}>
               <div className={styles.approvalHead}>
@@ -285,6 +381,20 @@ export function ChatPanel() {
                 </span>
               </div>
               <div className={styles.approvalSummary}>{action.summary}</div>
+
+              {batchTasks && batchTasks.length > 0 && (
+                <div className={styles.batchTasksList}>
+                  {batchTasks.map((bt, idx) => (
+                    <div key={idx} className={styles.batchTaskItem}>
+                      <span>{bt.title}</span>
+                      <span className={styles.batchTaskDate}>
+                        {bt.scheduledDate ? bt.scheduledDate.slice(0, 10) : "Today"} ({bt.estimateMinutes ?? 60}m)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className={styles.approvalActions}>
                 <button
                   type="button"
@@ -309,7 +419,18 @@ export function ChatPanel() {
           );
         })}
 
-        {sendChat.isPending && <div className={`${styles.msg} ${styles.assistant}`}>Thinking…</div>}
+        {isGenerating && (
+          <div className={styles.thinkingBox}>
+            <div className={styles.thinkingHeader} onClick={() => setShowThinking((v) => !v)}>
+              <div className={styles.thinkingTitle}>
+                <Sparkles size={13} className={styles.thinkingSpinner} />
+                <span>{liveStatus || "Thinking & Planning..."}</span>
+              </div>
+              {showThinking ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </div>
+            {showThinking && liveThinking && <div className={styles.thinkingContent}>{liveThinking}</div>}
+          </div>
+        )}
       </div>
 
       <div className={styles.undoList}>
@@ -331,6 +452,19 @@ export function ChatPanel() {
       </div>
 
       <div className={styles.inputWrap}>
+        <div className={styles.quickActionsRow}>
+          <button
+            type="button"
+            className={styles.sprintBtn}
+            onClick={handleTriggerSprint}
+            disabled={isGenerating}
+            title="Plan the upcoming 7-day sprint using your Goals & Study Limits"
+          >
+            <CalendarClock size={13} />
+            <span>🚀 Plan Next 7-Day Sprint</span>
+          </button>
+        </div>
+
         {/* Suggest / Update toggle and Model select positioned near text box */}
         <div className={styles.inputControlsRow}>
           <div className={styles.modeToggle}>
@@ -372,7 +506,7 @@ export function ChatPanel() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
           />
-          <button type="button" className={styles.send} disabled={sendChat.isPending} onClick={handleSend}>
+          <button type="button" className={styles.send} disabled={isGenerating} onClick={() => handleSend()}>
             Send
           </button>
         </div>

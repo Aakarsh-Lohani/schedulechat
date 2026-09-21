@@ -23,6 +23,7 @@ import { ScheduledTasksView } from "@/components/scheduled/ScheduledTasksView";
 import { AlarmDialog } from "@/components/scheduled/AlarmDialog";
 import { useScheduledTaskAlarms } from "@/lib/scheduled/useScheduledTaskAlarms";
 import { DashboardView } from "@/components/dashboard/DashboardView";
+import { GoalsView } from "@/components/goals/GoalsView";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { ErrorPopup } from "@/components/ui/ErrorPopup";
 import styles from "./AppShell.module.scss";
@@ -90,6 +91,8 @@ export function AppShell() {
           <div className={styles.viewContainer}>
             {view === "dashboard" ? (
               <DashboardView />
+            ) : view === "goals" ? (
+              <GoalsView />
             ) : view === "calendar" ? (
               <CalendarView />
             ) : view === "scheduled" ? (

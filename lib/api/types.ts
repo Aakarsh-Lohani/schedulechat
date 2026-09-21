@@ -54,6 +54,7 @@ export interface AIActionDTO {
   createdAt: string;
   executedAt: string | null;
   undoneAt: string | null;
+  proposedPayload?: Record<string, unknown>;
 }
 
 export interface ConversationDTO {
@@ -68,6 +69,15 @@ export interface ChatReplyDTO {
   proposals: { id: string; type: string; summary: string; status: string }[];
   conversationId?: string;
   conversationTitle?: string;
+  thinkingSteps?: string[];
+}
+
+export interface GoalContextDTO {
+  id: string;
+  userGoalsMarkdown: string;
+  aiSprintLog: string;
+  lastSprintPlanDate: string | null;
+  updatedAt: string;
 }
 
 export interface ScheduledTaskDTO {

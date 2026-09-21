@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type BoardView = "dashboard" | "today" | "scheduled" | "calendar" | string; // string = a tabId
+export type BoardView = "dashboard" | "today" | "goals" | "scheduled" | "calendar" | string; // string = a tabId
 
 export interface ApiErrorInfo {
   error: string;

@@ -4,18 +4,18 @@ import { buildToolsForMode } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/providers/common";
 import type { ChatTurnInput, ChatTurnResult } from "@/lib/ai/providers/types";
 
-const MAX_TOOL_ITERATIONS = 6;
+const MAX_TOOL_ITERATIONS = 10;
 
 // Update this if Google ships a newer default model — check
 // https://ai.google.dev/gemini-api/docs/models for the current list.
 const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
 export const AVAILABLE_GEMINI_MODELS = [
-  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Workhorse Flagship)" },
-  { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash (Agentic Reasoning)" },
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Flagship)" },
+  { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
   { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
   { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro (Deep Reasoning)" },
+  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
 ] as const;
 
 let client: GoogleGenerativeAI | null = null;
@@ -71,7 +71,7 @@ async function generateWithRetry(
 }
 
 export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResult> {
-  const { userId, mode, systemPrompt, history, model: requestedModel } = input;
+  const { userId, mode, systemPrompt, history, model: requestedModel, onProgress } = input;
 
   const modelName = requestedModel || DEFAULT_GEMINI_MODEL;
   const model = getClient().getGenerativeModel({
@@ -88,12 +88,28 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
   }));
 
   const createdActionIds: string[] = [];
+  const thinkingSteps: string[] = [];
   let finalText = "";
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+    onProgress?.({ type: "status", text: i === 0 ? "Analyzing request..." : "Evaluating tool output and planning..." });
+
     const result = await generateWithRetry(model, { contents });
     const candidate = result.response.candidates?.[0];
     if (!candidate?.content) break;
+
+    // Extract any model reasoning / thought parts
+    if (Array.isArray(candidate.content.parts)) {
+      for (const part of candidate.content.parts) {
+        const thoughtText = (part as { thought?: boolean; text?: string }).thought
+          ? (part as { text?: string }).text
+          : null;
+        if (thoughtText) {
+          thinkingSteps.push(thoughtText);
+          onProgress?.({ type: "thinking", text: thoughtText });
+        }
+      }
+    }
 
     // Append model response to conversation history
     contents.push(candidate.content);
@@ -109,6 +125,7 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
 
     const responseParts: Part[] = [];
     for (const call of calls) {
+      onProgress?.({ type: "status", text: `Executing: ${call.name}...` });
       const toolResult = await executeToolCall(userId, mode, call.name, call.args);
       if (toolResult.createdActionId) createdActionIds.push(toolResult.createdActionId);
       responseParts.push({
@@ -126,5 +143,5 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
     });
   }
 
-  return { replyText: finalText || "(no response)", createdActionIds };
+  return { replyText: finalText || "(no response)", createdActionIds, thinkingSteps };
 }

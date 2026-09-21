@@ -10,13 +10,15 @@ import type Anthropic from "@anthropic-ai/sdk";
 export interface ToolProposal {
   actionType:
     | "create-task"
+    | "create-tasks-batch"
     | "update-task"
     | "move-task"
     | "set-schedule"
     | "create-tab"
     | "archive-task"
     | "create-scheduled-task"
-    | "delete-scheduled-task";
+    | "delete-scheduled-task"
+    | "update-sprint-log";
   summary: string;
   proposedPayload: Record<string, unknown>;
   beforeSnapshot: Record<string, unknown> | null;
@@ -85,6 +87,11 @@ const getActiveTimersSchema = z.object({});
 
 const getTabsSchema = z.object({});
 
+const getUnfinishedTasksSchema = z.object({
+  daysBack: z.number().min(1).max(30).default(7),
+  tzOffset: z.number().optional(),
+});
+
 // ---- Propose (write) tools ----
 
 const proposeCreateTaskSchema = z.object({
@@ -93,7 +100,32 @@ const proposeCreateTaskSchema = z.object({
   estimateMinutes: z.number().min(1).max(24 * 60).default(30),
   defaultTimerMinutes: z.number().min(1).max(240).default(30),
   scheduleForToday: z.boolean().default(false),
+  scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD format").optional(),
   tzOffset: z.number().optional(),
+});
+
+const proposeCreateTasksBatchSchema = z.object({
+  batchTitle: z.string().default("Weekly Sprint Tasks"),
+  tasks: z
+    .array(
+      z.object({
+        tabName: z.string(),
+        title: z.string(),
+        estimateMinutes: z.number().min(1).max(24 * 60).default(60),
+        defaultTimerMinutes: z.number().min(1).max(240).default(30),
+        scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD format").optional(),
+        description: z.string().optional(),
+      })
+    )
+    .min(1)
+    .max(30),
+  sprintAssumptions: z.string().optional(),
+  tzOffset: z.number().optional(),
+});
+
+const proposeUpdateSprintLogSchema = z.object({
+  sprintNotes: z.string(),
+  assumptions: z.string().optional(),
 });
 
 const proposeUpdateTaskSchema = z.object({
@@ -224,6 +256,46 @@ export const TOOLS: Record<string, ToolDef> = {
     },
   },
 
+  getUnfinishedTasks: {
+    kind: "read",
+    description:
+      "Query incomplete/leftover tasks from the past N days (default 7 days) that are not done or archived. Useful for rolling unfinished tasks into the new sprint.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        daysBack: { type: "number", description: "Number of days back to inspect, default 7" },
+        tzOffset: { type: "number", description: "Client timezone offset in minutes" },
+      },
+    },
+    zodSchema: getUnfinishedTasksSchema,
+    handler: async (userId, input) => {
+      const days = input.daysBack ?? 7;
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      const tasks = await Task.find({
+        userId,
+        status: { $in: ["not-started", "in-progress"] },
+        $or: [
+          { scheduledDate: { $gte: cutoff, $lte: new Date() } },
+          { scheduledDate: null, createdAt: { $gte: cutoff } },
+        ],
+      })
+        .populate("tabId", "name")
+        .limit(30)
+        .lean();
+
+      return tasks.map((t) => ({
+        id: String(t._id),
+        title: t.title,
+        tab: (t.tabId as unknown as { name?: string })?.name ?? "General",
+        status: t.status,
+        estimateMinutes: t.estimateMinutes,
+        totalTrackedSeconds: t.totalTrackedSeconds,
+        progressPercent: t.progressPercent,
+        scheduledDate: t.scheduledDate ? t.scheduledDate.toISOString().slice(0, 10) : null,
+      }));
+    },
+  },
+
   proposeCreateTask: {
     kind: "propose",
     description:
@@ -236,22 +308,114 @@ export const TOOLS: Record<string, ToolDef> = {
         estimateMinutes: { type: "number", description: "Planned effort in minutes" },
         defaultTimerMinutes: { type: "number", description: "Timer length when dragged onto a timer slot" },
         scheduleForToday: { type: "boolean", description: "Whether to schedule this for today" },
+        scheduledDate: { type: "string", description: "Specific date in YYYY-MM-DD format (e.g. 2026-09-22)" },
       },
       required: ["tabName", "title"],
     },
     zodSchema: proposeCreateTaskSchema,
     handler: async (userId, input) => {
       const tabId = await resolveTabId(userId, input.tabName);
+      let targetDate: string | null = null;
+      if (input.scheduledDate) {
+        targetDate = new Date(input.scheduledDate + "T00:00:00.000Z").toISOString();
+      } else if (input.scheduleForToday) {
+        targetDate = startOfToday(input.tzOffset).toISOString();
+      }
+
       return {
         actionType: "create-task",
-        summary: `Create task "${input.title}" in ${input.tabName}${input.scheduleForToday ? " (scheduled for today)" : ""}`,
+        summary: `Create task "${input.title}" in ${input.tabName}${
+          input.scheduledDate ? ` (scheduled for ${input.scheduledDate})` : input.scheduleForToday ? " (scheduled for today)" : ""
+        }`,
         proposedPayload: {
           tabId: String(tabId),
           title: input.title,
           estimateMinutes: input.estimateMinutes,
           defaultTimerMinutes: input.defaultTimerMinutes,
-          scheduledDate: input.scheduleForToday ? startOfToday(input.tzOffset).toISOString() : null,
+          scheduledDate: targetDate,
           source: "ai-suggested",
+        },
+        beforeSnapshot: null,
+      };
+    },
+  },
+
+  proposeCreateTasksBatch: {
+    kind: "propose",
+    description:
+      "Propose creating a batch of tasks across the upcoming 7-day sprint. Allows scheduling multiple tasks across specific dates with daily limits in a single turn.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        batchTitle: { type: "string", description: "Title or focus of this batch, e.g. 'Sprint 1: Arrays & System Design LLD'" },
+        tasks: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              tabName: { type: "string", description: "Which tab (e.g. DSA, System Design, Projects)" },
+              title: { type: "string", description: "Task title" },
+              estimateMinutes: { type: "number", description: "Estimated duration in minutes" },
+              defaultTimerMinutes: { type: "number", description: "Timer slot duration" },
+              scheduledDate: { type: "string", description: "YYYY-MM-DD date" },
+              description: { type: "string", description: "Optional notes/context" },
+            },
+            required: ["tabName", "title"],
+          },
+        },
+        sprintAssumptions: { type: "string", description: "Assumptions and pacing rationale" },
+      },
+      required: ["tasks"],
+    },
+    zodSchema: proposeCreateTasksBatchSchema,
+    handler: async (userId, input) => {
+      const resolvedTasks = [];
+      for (const t of input.tasks) {
+        const tabId = await resolveTabId(userId, t.tabName);
+        resolvedTasks.push({
+          tabId: String(tabId),
+          tabName: t.tabName,
+          title: t.title,
+          estimateMinutes: t.estimateMinutes ?? 60,
+          defaultTimerMinutes: t.defaultTimerMinutes ?? 30,
+          scheduledDate: t.scheduledDate ? new Date(t.scheduledDate + "T00:00:00.000Z").toISOString() : null,
+          description: t.description ?? "",
+          source: "ai-suggested",
+        });
+      }
+
+      return {
+        actionType: "create-tasks-batch",
+        summary: `Create sprint batch "${input.batchTitle ?? "Weekly Sprint"}" with ${resolvedTasks.length} tasks across 7 days`,
+        proposedPayload: {
+          batchTitle: input.batchTitle ?? "Weekly Sprint",
+          tasks: resolvedTasks,
+          sprintAssumptions: input.sprintAssumptions ?? "",
+        },
+        beforeSnapshot: null,
+      };
+    },
+  },
+
+  proposeUpdateSprintLog: {
+    kind: "propose",
+    description:
+      "Propose recording sprint retrospective, pacing progress, and notes into the AI Sprint Log section of the Goals document.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sprintNotes: { type: "string", description: "Sprint retrospective, pacing progress, and notes for next iteration" },
+        assumptions: { type: "string", description: "Key assumptions and workload balance decisions" },
+      },
+      required: ["sprintNotes"],
+    },
+    zodSchema: proposeUpdateSprintLogSchema,
+    handler: async (_userId, input) => {
+      return {
+        actionType: "update-sprint-log",
+        summary: "Update AI Sprint Log with new sprint retrospective and assumptions",
+        proposedPayload: {
+          aiSprintLog: input.assumptions ? `${input.sprintNotes}\n\n### Assumptions\n${input.assumptions}` : input.sprintNotes,
         },
         beforeSnapshot: null,
       };

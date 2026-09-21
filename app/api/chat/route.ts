@@ -12,6 +12,7 @@ import { checkRateLimit } from "@/lib/rateLimit";
 import { logger } from "@/lib/logger";
 
 const HISTORY_LIMIT = 12;
+const TIMEOUT_MS = 120000; // 120 seconds for deep weekly planning & batch tool calls
 
 export async function POST(req: Request) {
   const userId = await getCurrentUserId();
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request", code: "VALIDATION_ERROR" }, { status: 400 });
   }
-  const { message, mode, model, conversationId: requestedConvoId } = parsed.data;
+  const { message, mode, model, conversationId: requestedConvoId, stream: isStreaming } = parsed.data;
 
   // Strict Suggest Mode isolation: if MONGODB_READONLY_URI is not configured, do not fall back to main env!
   if (mode === "suggest" && !process.env.MONGODB_READONLY_URI) {
@@ -75,9 +76,94 @@ export async function POST(req: Request) {
   const contextSnapshot = await buildContextSnapshot(userId);
   const systemPrompt = `${buildSystemPrompt(mode)}\n\n${contextSnapshot}`;
 
-  logger.info({ userId, mode, model, conversationId: String(activeConvoId), provider: process.env.AI_PROVIDER ?? "anthropic" }, "chat turn started");
+  logger.info(
+    { userId, mode, model, conversationId: String(activeConvoId), provider: process.env.AI_PROVIDER ?? "anthropic" },
+    "chat turn started"
+  );
 
+  // Streaming response mode
+  if (isStreaming) {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        function emit(data: Record<string, unknown>) {
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+          } catch {
+            // Stream might be closed by client
+          }
+        }
+
+        try {
+          const result = await Promise.race([
+            runChatTurn({
+              userId,
+              mode,
+              systemPrompt,
+              history: historyDocs.map((m) => ({
+                role: m.role === "assistant" ? "assistant" : "user",
+                content: m.content,
+              })),
+              model,
+              onProgress: (event) => {
+                emit({ type: event.type, text: event.text });
+              },
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("AI response timed out after 120 seconds")), TIMEOUT_MS)
+            ),
+          ]);
+
+          const assistantMessage = await ChatMessage.create({
+            userId,
+            conversationId: activeConvoId,
+            role: "assistant",
+            content: result.replyText,
+            mode,
+            relatedActionIds: result.createdActionIds,
+          });
+
+          await Conversation.updateOne({ _id: activeConvoId }, { $set: { updatedAt: new Date() } });
+
+          const proposals = result.createdActionIds.length
+            ? await AIAction.find({ _id: { $in: result.createdActionIds } }).lean()
+            : [];
+
+          emit({
+            type: "done",
+            reply: assistantMessage.content,
+            conversationId: String(convo._id),
+            conversationTitle: convo.title,
+            thinkingSteps: result.thinkingSteps ?? [],
+            proposals: proposals.map((p) => ({
+              id: String(p._id),
+              type: p.type,
+              summary: p.summary,
+              status: p.status,
+            })),
+          });
+        } catch (err: unknown) {
+          const errorMsg = err instanceof Error ? err.message : "AI turn failed";
+          logger.error({ err, userId }, "chat stream turn failed");
+          emit({ type: "error", error: `Copilot error: ${errorMsg}` });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    });
+  }
+
+  // Non-streaming fallback
   try {
+    const collectedThinking: string[] = [];
     const result = await Promise.race([
       runChatTurn({
         userId,
@@ -85,9 +171,12 @@ export async function POST(req: Request) {
         systemPrompt,
         history: historyDocs.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
         model,
+        onProgress: (event) => {
+          if (event.type === "thinking") collectedThinking.push(event.text);
+        },
       }),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("AI response timed out after 35 seconds")), 35000)
+        setTimeout(() => reject(new Error("AI response timed out after 120 seconds")), TIMEOUT_MS)
       ),
     ]);
 
@@ -110,6 +199,7 @@ export async function POST(req: Request) {
       reply: assistantMessage.content,
       conversationId: String(convo._id),
       conversationTitle: convo.title,
+      thinkingSteps: result.thinkingSteps ?? collectedThinking,
       proposals: proposals.map((p) => ({
         id: String(p._id),
         type: p.type,

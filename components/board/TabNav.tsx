@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { X, Plus, Calendar, CalendarClock, LayoutDashboard, GripVertical } from "lucide-react";
+import { X, Plus, Calendar, CalendarClock, LayoutDashboard, GripVertical, Target } from "lucide-react";
 import { useCreateTab, useDeleteTab, useUpdateTab, useTabs, useTasks } from "@/lib/api/hooks";
 import { useUIStore } from "@/lib/store/uiStore";
 import type { BoardView } from "@/lib/store/uiStore";
@@ -148,6 +148,17 @@ export function TabNav({ view, onChangeView }: { view: BoardView; onChangeView: 
         onClick={() => onChangeView("dashboard")}
       />
       <NavItem id="today" label="Today's Tasks" active={view === "today"} onClick={() => onChangeView("today")} droppableId="today" />
+      <NavItem
+        id="goals"
+        label={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <Target size={13} />
+            Goals & Limits
+          </span>
+        }
+        active={view === "goals"}
+        onClick={() => onChangeView("goals")}
+      />
       {tabs?.map((tab) => {
         const isPrimary = tab.name === "Projects" || tab.isSystemDefault;
         return (
