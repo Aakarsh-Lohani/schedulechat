@@ -2,6 +2,7 @@
 
 import React, { useMemo, useEffect, useRef, useState } from "react";
 import { AlertCircle } from "lucide-react";
+import DOMPurify from "dompurify";
 import styles from "./MarkdownContent.module.scss";
 
 interface MarkdownContentProps {
@@ -82,7 +83,13 @@ function MermaidBlock({ chart }: { chart: string }) {
 
         const { svg: renderedSvg } = await m.render(id.current, chart);
         if (isMounted) {
-          setSvg(renderedSvg);
+          const cleanSvg = typeof window !== "undefined"
+            ? DOMPurify.sanitize(renderedSvg, {
+                USE_PROFILES: { svg: true, svgFilters: true, html: true },
+                ADD_TAGS: ["foreignObject"],
+              })
+            : renderedSvg;
+          setSvg(cleanSvg);
           setError("");
         }
       } catch (err: any) {
@@ -121,10 +128,17 @@ function MermaidBlock({ chart }: { chart: string }) {
     );
   }
 
+  const sanitizedHtml = typeof window !== "undefined"
+    ? DOMPurify.sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true, html: true },
+        ADD_TAGS: ["foreignObject"],
+      })
+    : svg;
+
   return (
     <div
       className={styles.mermaidWrap}
-      dangerouslySetInnerHTML={{ __html: svg }}
+      dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
     />
   );
 }
