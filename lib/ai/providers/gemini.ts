@@ -166,7 +166,12 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
     const responseParts: Part[] = [];
     for (const call of calls) {
       onProgress?.({ type: "status", text: `Executing: ${call.name}...` });
-      onProgress?.({ type: "thinking", text: `Executing tool: ${call.name}` });
+      onProgress?.({
+        type: "tool_call",
+        text: `Executing ${call.name}`,
+        toolName: call.name,
+        toolArgs: call.args as Record<string, unknown>,
+      });
 
       const toolResult = await executeToolCall(userId, mode, call.name, call.args);
       if (toolResult.createdActionId) createdActionIds.push(toolResult.createdActionId);
@@ -174,7 +179,13 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
       const resultSnippet = toolResult.resultText.length > 300
         ? toolResult.resultText.slice(0, 300) + "…"
         : toolResult.resultText;
-      onProgress?.({ type: "thinking", text: `✓ ${call.name} result: ${resultSnippet}` });
+
+      onProgress?.({
+        type: "tool_result",
+        text: resultSnippet,
+        toolName: call.name,
+        isError: toolResult.isError,
+      });
 
       responseParts.push({
         functionResponse: {

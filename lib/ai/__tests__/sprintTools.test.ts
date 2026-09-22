@@ -88,4 +88,52 @@ describe("Sprint Tools & Batch Scheduling", () => {
 
     expect(parsed.success).toBe(true);
   });
+
+  it("getScheduledTasks schema validates input correctly", () => {
+    const tool = TOOLS.getScheduledTasks!;
+    expect(tool).toBeDefined();
+    expect(tool.kind).toBe("read");
+
+    const parsedDefault = tool.zodSchema.safeParse({});
+    expect(parsedDefault.success).toBe(true);
+    if (parsedDefault.success) {
+      expect(parsedDefault.data.enabledOnly).toBe(true);
+    }
+
+    const parsedExplicit = tool.zodSchema.safeParse({ enabledOnly: false });
+    expect(parsedExplicit.success).toBe(true);
+  });
+
+  it("getDailyWorkload schema validates date and range parameters", () => {
+    const tool = TOOLS.getDailyWorkload!;
+    expect(tool).toBeDefined();
+    expect(tool.kind).toBe("read");
+
+    const valid = tool.zodSchema.safeParse({
+      startDate: "2026-09-22",
+      days: 7,
+      tzOffset: -330,
+    });
+    expect(valid.success).toBe(true);
+
+    const invalidDate = tool.zodSchema.safeParse({
+      startDate: "invalid-date",
+      days: 7,
+    });
+    expect(invalidDate.success).toBe(false);
+
+    const invalidDays = tool.zodSchema.safeParse({
+      days: 50, // max 14
+    });
+    expect(invalidDays.success).toBe(false);
+  });
+
+  it("getGoalContext schema validates successfully", () => {
+    const tool = TOOLS.getGoalContext!;
+    expect(tool).toBeDefined();
+    expect(tool.kind).toBe("read");
+
+    const parsed = tool.zodSchema.safeParse({});
+    expect(parsed.success).toBe(true);
+  });
 });

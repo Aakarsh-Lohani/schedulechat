@@ -4,8 +4,24 @@ export interface ChatTurnMessage {
 }
 
 export interface ChatProgressEvent {
-  type: "thinking" | "status";
+  type: "thinking" | "status" | "tool_call" | "tool_result";
   text: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
+  isError?: boolean;
+}
+
+export interface TraceStep {
+  id: string;
+  kind: "thought" | "tool" | "status";
+  title: string;
+  detail?: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
+  toolResult?: string;
+  isError?: boolean;
+  status: "running" | "done" | "error";
+  timestamp: number;
 }
 
 export interface ChatTurnInput {

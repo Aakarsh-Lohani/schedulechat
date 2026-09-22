@@ -537,6 +537,25 @@
   font-size: 11.5px;
 }
 
+.thinkingHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: t.$text-muted;
+}
+
+.livePulseBadge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 9999px;
+  background: rgba(167, 139, 250, 0.18);
+  color: #c4b5fd;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+}
+
 .thinkingSpinner {
   animation: spin 1s linear infinite;
   display: inline-block;
@@ -566,8 +585,171 @@
   font-size: 11px;
   line-height: 1.5;
   white-space: pre-wrap;
-  max-height: 300px;
+  max-height: 320px;
   overflow-y: auto;
+}
+
+.traceTimeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.traceToolItem {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(167, 139, 250, 0.15);
+  border-radius: 6px;
+  padding: 6px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.traceToolHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.toolIcon {
+  color: #a78bfa;
+}
+
+.traceToolName {
+  font-weight: 500;
+  color: #e7eaee;
+  font-family: t.$font-mono;
+  font-size: 11px;
+}
+
+.traceBadgeRunning {
+  font-size: 9.5px;
+  color: #c4b5fd;
+  background: rgba(167, 139, 250, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.traceBadgeDone {
+  font-size: 9.5px;
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.traceBadgeError {
+  font-size: 9.5px;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.traceToolResult {
+  font-family: t.$font-mono;
+  font-size: 10.5px;
+  color: t.$text-muted;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 6px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.traceThoughtItem {
+  border-left: 2px solid rgba(167, 139, 250, 0.35);
+  padding-left: 8px;
+  margin: 2px 0;
+}
+
+.traceThoughtHead {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #c4b5fd;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.thoughtIcon {
+  color: #a78bfa;
+}
+
+.traceThoughtBody {
+  color: t.$text-muted;
+  font-size: 11px;
+  line-height: 1.45;
+  font-style: italic;
+  white-space: pre-wrap;
+}
+
+.traceStatusItem {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: t.$text-muted;
+  padding: 2px 0;
+}
+
+.statusIcon {
+  color: t.$text-muted;
+}
+
+.rawThoughtText {
+  color: t.$text-muted;
+  font-family: t.$font-mono;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.stopBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.28);
+    border-color: #ef4444;
+    color: #fff;
+  }
+}
+
+.errorBanner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
 .batchTasksList {

@@ -14,9 +14,14 @@ import {
   ChevronDown,
   ChevronUp,
   Zap,
+  Square,
+  Wrench,
+  AlertCircle,
+  Clock,
 } from "lucide-react";
 import { useUIStore } from "@/lib/store/uiStore";
 import { MarkdownContent } from "./MarkdownContent";
+import type { TraceStep } from "@/lib/ai/providers/types";
 import {
   useAiActions,
   useApproveAction,
@@ -34,22 +39,34 @@ interface LocalMessage {
   role: "user" | "assistant";
   content: string;
   thinkingContent?: string;
+  traceSteps?: TraceStep[];
+  error?: string;
+  isStopped?: boolean;
 }
 
 /** Collapsible thinking accordion, used live during generation and permanently on completed messages. */
 function ThinkingAccordion({
   content,
+  steps,
   status,
   isLive,
 }: {
-  content: string;
+  content?: string;
+  steps?: TraceStep[];
   status?: string | null;
   isLive: boolean;
 }) {
   const [expanded, setExpanded] = useState(isLive);
-  const label = isLive
-    ? status || "Thinking & Planning..."
-    : "Thought process & tool execution";
+
+  const stepCount = steps?.length ?? 0;
+  const toolCount = steps?.filter((s) => s.kind === "tool").length ?? 0;
+
+  const liveLabel = status || "Thinking & Planning...";
+  const completedLabel =
+    toolCount > 0
+      ? `Thought process (${toolCount} tool call${toolCount > 1 ? "s" : ""}, ${stepCount} step${stepCount > 1 ? "s" : ""})`
+      : `Thought process (${stepCount} step${stepCount > 1 ? "s" : ""})`;
+
   return (
     <div className={`${styles.thinkingBox} ${!isLive ? styles.thinkingBoxCompleted : ""}`}>
       <div className={styles.thinkingHeader} onClick={() => setExpanded((v) => !v)}>
@@ -59,11 +76,71 @@ function ThinkingAccordion({
           ) : (
             <Sparkles size={13} />
           )}
-          <span>{label}</span>
+          <span>{isLive ? liveLabel : completedLabel}</span>
         </div>
-        {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        <div className={styles.thinkingHeaderRight}>
+          {isLive && status && <span className={styles.livePulseBadge}>Live</span>}
+          {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        </div>
       </div>
-      {expanded && content && <div className={styles.thinkingContent}>{content}</div>}
+
+      {expanded && (
+        <div className={styles.thinkingContent}>
+          {steps && steps.length > 0 ? (
+            <div className={styles.traceTimeline}>
+              {steps.map((step) => {
+                if (step.kind === "tool") {
+                  return (
+                    <div key={step.id} className={styles.traceToolItem}>
+                      <div className={styles.traceToolHead}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <Wrench size={11} className={styles.toolIcon} />
+                          <span className={styles.traceToolName}>{step.toolName || step.title}</span>
+                        </div>
+                        {step.status === "running" ? (
+                          <span className={styles.traceBadgeRunning}>
+                            <Sparkles size={9} className={styles.thinkingSpinner} /> running
+                          </span>
+                        ) : step.isError ? (
+                          <span className={styles.traceBadgeError}>error</span>
+                        ) : (
+                          <span className={styles.traceBadgeDone}>
+                            <Check size={10} /> completed
+                          </span>
+                        )}
+                      </div>
+                      {step.toolResult && (
+                        <div className={styles.traceToolResult}>{step.toolResult}</div>
+                      )}
+                    </div>
+                  );
+                }
+
+                if (step.kind === "thought") {
+                  return (
+                    <div key={step.id} className={styles.traceThoughtItem}>
+                      <div className={styles.traceThoughtHead}>
+                        <Sparkles size={11} className={styles.thoughtIcon} />
+                        <span>Reasoning</span>
+                      </div>
+                      <div className={styles.traceThoughtBody}>{step.detail || step.title}</div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={step.id} className={styles.traceStatusItem}>
+                    <Clock size={10} className={styles.statusIcon} />
+                    <span>{step.title}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            content && <div className={styles.rawThoughtText}>{content}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -126,7 +203,15 @@ export function ChatPanel() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [liveStatus, setLiveStatus] = useState<string | null>(null);
   const [liveThinking, setLiveThinking] = useState<string>("");
-  const [showThinking, setShowThinking] = useState(true);
+  const [liveTraceSteps, setLiveTraceSteps] = useState<TraceStep[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  function handleStop() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }
 
   // Special commands popover state
   const [showCmdMenu, setShowCmdMenu] = useState(false);
@@ -212,12 +297,21 @@ export function ChatPanel() {
     setIsGenerating(true);
     setLiveStatus("Starting Copilot reasoning...");
     setLiveThinking("");
-    setShowThinking(true);
+    setLiveTraceSteps([]);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const accumulatedSteps: TraceStep[] = [];
+    let buffer = "";
+    let finalReply = "";
+    let accumulatedThinking = "";
 
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           message: text,
           mode: chatMode,
@@ -238,9 +332,6 @@ export function ChatPanel() {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
-      let finalReply = "";
-      let accumulatedThinking = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -255,18 +346,66 @@ export function ChatPanel() {
           if (!dataLine) continue;
           const jsonStr = dataLine.slice(dataLine.indexOf(":") + 1).trim();
           if (!jsonStr) continue;
-          let data: { type: string; text?: string; reply?: string; error?: string; conversationId?: string; conversationTitle?: string };
+          let data: {
+            type: string;
+            text?: string;
+            reply?: string;
+            error?: string;
+            toolName?: string;
+            toolArgs?: Record<string, unknown>;
+            isError?: boolean;
+            conversationId?: string;
+            conversationTitle?: string;
+          };
           try {
             data = JSON.parse(jsonStr);
           } catch {
-            continue; // genuinely malformed JSON, skip
+            continue;
           }
+
           if (data.type === "status") {
             setLiveStatus(data.text ?? null);
+            accumulatedSteps.push({
+              id: "status-" + Date.now() + Math.random(),
+              kind: "status",
+              title: data.text ?? "Status update",
+              status: "done",
+              timestamp: Date.now(),
+            });
+            setLiveTraceSteps([...accumulatedSteps]);
           } else if (data.type === "thinking") {
             const newThought = data.text ?? "";
             accumulatedThinking += (accumulatedThinking ? "\n\n" : "") + newThought;
             setLiveThinking(accumulatedThinking);
+            accumulatedSteps.push({
+              id: "thought-" + Date.now() + Math.random(),
+              kind: "thought",
+              title: "Reasoning",
+              detail: newThought,
+              status: "done",
+              timestamp: Date.now(),
+            });
+            setLiveTraceSteps([...accumulatedSteps]);
+          } else if (data.type === "tool_call") {
+            setLiveStatus(`Executing: ${data.toolName ?? "tool"}...`);
+            accumulatedSteps.push({
+              id: "tool-" + (data.toolName ?? "call") + "-" + Date.now(),
+              kind: "tool",
+              title: data.toolName ?? "Tool Call",
+              toolName: data.toolName,
+              toolArgs: data.toolArgs,
+              status: "running",
+              timestamp: Date.now(),
+            });
+            setLiveTraceSteps([...accumulatedSteps]);
+          } else if (data.type === "tool_result") {
+            const matchingTool = [...accumulatedSteps].reverse().find((s) => s.kind === "tool" && s.toolName === data.toolName);
+            if (matchingTool) {
+              matchingTool.status = data.isError ? "error" : "done";
+              matchingTool.toolResult = data.text;
+              matchingTool.isError = data.isError;
+            }
+            setLiveTraceSteps([...accumulatedSteps]);
           } else if (data.type === "done") {
             finalReply = data.reply ?? "";
             if (data.conversationId && data.conversationId !== activeConversationId) {
@@ -275,6 +414,8 @@ export function ChatPanel() {
             qc.invalidateQueries({ queryKey: ["ai-actions"] });
             qc.invalidateQueries({ queryKey: ["conversations"] });
             qc.invalidateQueries({ queryKey: ["goal-context"] });
+          } else if (data.type === "stopped") {
+            // Stream was stopped by user
           } else if (data.type === "error") {
             throw new Error(data.error ?? "Unknown Copilot error");
           }
@@ -288,22 +429,43 @@ export function ChatPanel() {
             role: "assistant",
             content: finalReply,
             thinkingContent: accumulatedThinking || undefined,
+            traceSteps: accumulatedSteps.length > 0 ? [...accumulatedSteps] : undefined,
           },
         ]);
       }
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to communicate with Copilot";
-      if (!customText) setInput(text);
-      setNewMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          content: `Copilot request failed: ${errorMsg}. Your prompt has been restored. Please try again.`,
-        },
-      ]);
+      const isAborted = controller.signal.aborted || (err instanceof Error && err.name === "AbortError");
+      if (isAborted) {
+        setNewMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            content: finalReply ? `${finalReply}\n\n*(Generation stopped by user)*` : "*(Generation stopped by user)*",
+            thinkingContent: accumulatedThinking || undefined,
+            traceSteps: accumulatedSteps.length > 0 ? [...accumulatedSteps] : undefined,
+            isStopped: true,
+          },
+        ]);
+      } else {
+        const errorMsg = err instanceof Error ? err.message : "Failed to communicate with Copilot";
+        if (!finalReply && !accumulatedThinking && !customText) {
+          setInput(text);
+        }
+        setNewMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            content: finalReply || "*(Response interrupted)*",
+            thinkingContent: accumulatedThinking || undefined,
+            traceSteps: accumulatedSteps.length > 0 ? [...accumulatedSteps] : undefined,
+            error: errorMsg,
+          },
+        ]);
+      }
     } finally {
       setIsGenerating(false);
       setLiveStatus(null);
+      abortControllerRef.current = null;
     }
   }
 
@@ -414,10 +576,20 @@ export function ChatPanel() {
         {messages.map((m, i) => (
           <div key={i} className={`${styles.msg} ${m.role === "user" ? styles.user : styles.assistant}`}>
             {m.role === "assistant" && <div className={styles.role}>Copilot</div>}
-            {m.role === "assistant" && m.thinkingContent && (
-              <ThinkingAccordion content={m.thinkingContent} isLive={false} />
+            {m.role === "assistant" && ((m.traceSteps && m.traceSteps.length > 0) || m.thinkingContent) && (
+              <ThinkingAccordion
+                content={m.thinkingContent}
+                steps={m.traceSteps}
+                isLive={false}
+              />
             )}
             {m.role === "assistant" ? <MarkdownContent content={m.content} /> : m.content}
+            {m.error && (
+              <div className={styles.errorBanner}>
+                <AlertCircle size={12} />
+                <span>{m.error}</span>
+              </div>
+            )}
           </div>
         ))}
 
@@ -488,9 +660,14 @@ export function ChatPanel() {
         })}
 
         {isGenerating && (
-          <div className={styles.msg + " " + styles.assistant}>
+          <div className={`${styles.msg} ${styles.assistant}`}>
             <div className={styles.role}>Copilot</div>
-            <ThinkingAccordion content={liveThinking} status={liveStatus} isLive={true} />
+            <ThinkingAccordion
+              content={liveThinking}
+              steps={liveTraceSteps}
+              status={liveStatus}
+              isLive={true}
+            />
           </div>
         )}
       </div>
@@ -558,7 +735,7 @@ export function ChatPanel() {
                   >
                     <div className={styles.cmdItemTitle}>
                       <CalendarClock size={13} color="#a78bfa" />
-                      <span>🚀 Plan Next 7-Day Sprint</span>
+                      <span>Plan Next 7-Day Sprint</span>
                     </div>
                     <div className={styles.cmdItemDesc}>
                       Review Goals & study limits, check unfinished tasks, and plan next 7 days.
@@ -590,10 +767,28 @@ export function ChatPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            disabled={isGenerating}
           />
-          <button type="button" className={styles.send} disabled={isGenerating} onClick={() => handleSend()}>
-            Send
-          </button>
+          {isGenerating ? (
+            <button
+              type="button"
+              className={styles.stopBtn}
+              onClick={handleStop}
+              title="Stop generation"
+            >
+              <Square size={11} />
+              <span>Stop</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.send}
+              disabled={!input.trim()}
+              onClick={() => handleSend()}
+            >
+              Send
+            </button>
+          )}
         </div>
       </div>
     </div>

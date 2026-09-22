@@ -89,7 +89,12 @@ export async function runAnthropicChat(input: ChatTurnInput): Promise<ChatTurnRe
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
     for (const block of toolUseBlocks) {
       onProgress?.({ type: "status", text: `Executing: ${block.name}...` });
-      onProgress?.({ type: "thinking", text: `Executing tool: ${block.name}` });
+      onProgress?.({
+        type: "tool_call",
+        text: `Executing ${block.name}`,
+        toolName: block.name,
+        toolArgs: block.input as Record<string, unknown>,
+      });
 
       const result = await executeToolCall(userId, mode, block.name, block.input);
       if (result.createdActionId) createdActionIds.push(result.createdActionId);
@@ -97,7 +102,13 @@ export async function runAnthropicChat(input: ChatTurnInput): Promise<ChatTurnRe
       const resultSnippet = result.resultText.length > 300
         ? result.resultText.slice(0, 300) + "…"
         : result.resultText;
-      onProgress?.({ type: "thinking", text: `✓ ${block.name} result: ${resultSnippet}` });
+
+      onProgress?.({
+        type: "tool_result",
+        text: resultSnippet,
+        toolName: block.name,
+        isError: result.isError,
+      });
 
       toolResults.push({
         type: "tool_result",

@@ -12,7 +12,7 @@ import { checkRateLimit } from "@/lib/rateLimit";
 import { logger } from "@/lib/logger";
 
 const HISTORY_LIMIT = 12;
-const TIMEOUT_MS = 120000; // 120 seconds for deep weekly planning & batch tool calls
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const userId = await getCurrentUserId();
@@ -95,24 +95,25 @@ export async function POST(req: Request) {
         }
 
         try {
-          const result = await Promise.race([
-            runChatTurn({
-              userId,
-              mode,
-              systemPrompt,
-              history: historyDocs.map((m) => ({
-                role: m.role === "assistant" ? "assistant" : "user",
-                content: m.content,
-              })),
-              model,
-              onProgress: (event) => {
-                emit({ type: event.type, text: event.text });
-              },
-            }),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error("AI response timed out after 120 seconds")), TIMEOUT_MS)
-            ),
-          ]);
+          const result = await runChatTurn({
+            userId,
+            mode,
+            systemPrompt,
+            history: historyDocs.map((m) => ({
+              role: m.role === "assistant" ? "assistant" : "user",
+              content: m.content,
+            })),
+            model,
+            onProgress: (event) => {
+              emit({
+                type: event.type,
+                text: event.text,
+                toolName: event.toolName,
+                toolArgs: event.toolArgs,
+                isError: event.isError,
+              });
+            },
+          });
 
           const assistantMessage = await ChatMessage.create({
             userId,
@@ -143,9 +144,14 @@ export async function POST(req: Request) {
             })),
           });
         } catch (err: unknown) {
-          const errorMsg = err instanceof Error ? err.message : "AI turn failed";
-          logger.error({ err, userId }, "chat stream turn failed");
-          emit({ type: "error", error: `Copilot error: ${errorMsg}` });
+          if (req.signal.aborted) {
+            logger.info({ userId }, "chat stream aborted by client");
+            emit({ type: "stopped", text: "Generation stopped by user" });
+          } else {
+            const errorMsg = err instanceof Error ? err.message : "AI turn failed";
+            logger.error({ err, userId }, "chat stream turn failed");
+            emit({ type: "error", error: `Copilot error: ${errorMsg}` });
+          }
         } finally {
           controller.close();
         }
@@ -164,21 +170,16 @@ export async function POST(req: Request) {
   // Non-streaming fallback
   try {
     const collectedThinking: string[] = [];
-    const result = await Promise.race([
-      runChatTurn({
-        userId,
-        mode,
-        systemPrompt,
-        history: historyDocs.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
-        model,
-        onProgress: (event) => {
-          if (event.type === "thinking") collectedThinking.push(event.text);
-        },
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("AI response timed out after 120 seconds")), TIMEOUT_MS)
-      ),
-    ]);
+    const result = await runChatTurn({
+      userId,
+      mode,
+      systemPrompt,
+      history: historyDocs.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
+      model,
+      onProgress: (event) => {
+        if (event.type === "thinking") collectedThinking.push(event.text);
+      },
+    });
 
     const assistantMessage = await ChatMessage.create({
       userId,

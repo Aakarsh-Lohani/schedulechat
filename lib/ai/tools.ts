@@ -3,6 +3,8 @@ import { Types } from "mongoose";
 import { Task } from "@/lib/db/models/Task";
 import { Tab } from "@/lib/db/models/Tab";
 import { TimerSession } from "@/lib/db/models/TimerSession";
+import { ScheduledTask } from "@/lib/db/models/ScheduledTask";
+import { GoalContext } from "@/lib/db/models/GoalContext";
 import { buildRRule, formatRecurrenceLabel } from "@/lib/calendar/recurrence";
 import type Anthropic from "@anthropic-ai/sdk";
 
@@ -91,6 +93,18 @@ const getUnfinishedTasksSchema = z.object({
   daysBack: z.number().min(1).max(30).default(7),
   tzOffset: z.number().optional(),
 });
+
+const getScheduledTasksSchema = z.object({
+  enabledOnly: z.boolean().default(true),
+});
+
+const getDailyWorkloadSchema = z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD format").optional(),
+  days: z.number().min(1).max(14).default(7),
+  tzOffset: z.number().optional(),
+});
+
+const getGoalContextSchema = z.object({});
 
 // ---- Propose (write) tools ----
 
@@ -293,6 +307,120 @@ export const TOOLS: Record<string, ToolDef> = {
         progressPercent: t.progressPercent,
         scheduledDate: t.scheduledDate ? t.scheduledDate.toISOString().slice(0, 10) : null,
       }));
+    },
+  },
+
+  getScheduledTasks: {
+    kind: "read",
+    description:
+      "List recurring routines, habit blocks, and scheduled meeting series (e.g. daily standup, LeetCode contests, exercise). Use this to avoid scheduling sprint tasks that conflict with existing routines.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        enabledOnly: { type: "boolean", description: "If true, only return active recurring routines (default true)" },
+      },
+    },
+    zodSchema: getScheduledTasksSchema,
+    handler: async (userId, input) => {
+      const query: Record<string, unknown> = { userId };
+      if (input.enabledOnly ?? true) query.enabled = true;
+      const tasks = await ScheduledTask.find(query).sort({ startTime: 1 }).lean();
+      return tasks.map((t) => ({
+        id: String(t._id),
+        title: t.title,
+        startTime: t.startTime,
+        durationMinutes: t.durationMinutes,
+        recurrenceRule: t.recurrenceRule,
+        recurrenceLabel: t.recurrenceLabel || formatRecurrenceLabel(t.recurrenceRule, t.startTime),
+        reminderMinutes: t.reminderMinutes,
+        enabled: t.enabled,
+      }));
+    },
+  },
+
+  getDailyWorkload: {
+    kind: "read",
+    description:
+      "Get scheduled task minutes and workload per date across upcoming days (default 7 days) to verify adherence to daily study limits (max 8h weekdays, 10h weekends).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        startDate: { type: "string", description: "Start date in YYYY-MM-DD format (defaults to today)" },
+        days: { type: "number", description: "Number of days to check, default 7" },
+        tzOffset: { type: "number", description: "Client timezone offset in minutes" },
+      },
+    },
+    zodSchema: getDailyWorkloadSchema,
+    handler: async (userId, input) => {
+      const numDays = input.days ?? 7;
+      let start: Date;
+      if (input.startDate) {
+        start = new Date(input.startDate + "T00:00:00.000Z");
+      } else {
+        start = startOfToday(input.tzOffset);
+      }
+      const end = new Date(start.getTime() + numDays * 24 * 60 * 60 * 1000);
+
+      const tasks = await Task.find({
+        userId,
+        status: { $ne: "archived" },
+        scheduledDate: { $gte: start, $lt: end },
+      }).lean();
+
+      // Aggregate by YYYY-MM-DD
+      const dayMap: Record<string, { minutes: number; count: number; titles: string[] }> = {};
+      for (let i = 0; i < numDays; i++) {
+        const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+        const key = d.toISOString().slice(0, 10);
+        dayMap[key] = { minutes: 0, count: 0, titles: [] };
+      }
+
+      for (const t of tasks) {
+        if (!t.scheduledDate) continue;
+        const key = t.scheduledDate.toISOString().slice(0, 10);
+        if (dayMap[key]) {
+          dayMap[key].minutes += t.estimateMinutes || 30;
+          dayMap[key].count += 1;
+          dayMap[key].titles.push(t.title);
+        }
+      }
+
+      return Object.entries(dayMap).map(([dateStr, data]) => {
+        const dateObj = new Date(dateStr + "T00:00:00.000Z");
+        const dayOfWeek = dateObj.getUTCDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const maxLimitMinutes = isWeekend ? 600 : 480; // 10h weekend, 8h weekday
+        const weekdayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][dayOfWeek];
+
+        return {
+          date: dateStr,
+          day: weekdayName,
+          isWeekend,
+          scheduledMinutes: data.minutes,
+          scheduledHours: Number((data.minutes / 60).toFixed(1)),
+          taskCount: data.count,
+          tasks: data.titles,
+          maxLimitMinutes,
+          remainingCapacityMinutes: Math.max(0, maxLimitMinutes - data.minutes),
+          isOverCapacity: data.minutes > maxLimitMinutes,
+        };
+      });
+    },
+  },
+
+  getGoalContext: {
+    kind: "read",
+    description:
+      "Get the user's long-term syllabus roadmap, goals, daily study limits, and previous AI sprint log notes.",
+    inputSchema: { type: "object", properties: {} },
+    zodSchema: getGoalContextSchema,
+    handler: async (userId) => {
+      const doc = await GoalContext.findOne({ userId }).lean();
+      return {
+        userGoalsMarkdown: doc?.userGoalsMarkdown || "(no goals set)",
+        aiSprintLog: doc?.aiSprintLog || "(no sprint history)",
+        updatedAt: doc?.updatedAt,
+      };
     },
   },
 
