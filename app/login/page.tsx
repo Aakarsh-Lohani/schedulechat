@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { AppLogo } from "@/components/ui/AppLogo";
 import styles from "./page.module.scss";
 
 export default function LoginPage() {
@@ -30,7 +31,10 @@ export default function LoginPage() {
     <div className={styles.wrap}>
       <form className={styles.card} onSubmit={handleSubmit}>
         <h1 className={styles.brand}>
-          Schedule<span>Chat</span>
+          <AppLogo size={28} />
+          <span className={styles.brandText}>
+            Schedule<span>Chat</span>
+          </span>
         </h1>
         <label className={styles.field}>
           Email

@@ -3,7 +3,15 @@ import { runAnthropicChat } from "@/lib/ai/providers/anthropic";
 import { runGeminiChat } from "@/lib/ai/providers/gemini";
 import type { ChatTurnInput, ChatTurnResult } from "@/lib/ai/providers/types";
 
-export type { ChatTurnInput, ChatTurnResult, ChatTurnMessage } from "@/lib/ai/providers/types";
+export type {
+  ChatTurnInput,
+  ChatTurnResult,
+  ChatTurnMessage,
+  ChatStepInput,
+  ChatStepResult,
+  TurnState,
+} from "@/lib/ai/providers/types";
+export { runChatStep } from "@/lib/ai/stepTurn";
 
 /**
  * Runs one chat turn against whichever provider is configured via AI_PROVIDER.

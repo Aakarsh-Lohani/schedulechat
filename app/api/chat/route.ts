@@ -4,7 +4,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { chatRequestSchema } from "@/lib/validation/schemas";
 import { buildSystemPrompt } from "@/lib/ai/systemPrompt";
 import { buildContextSnapshot } from "@/lib/ai/context";
-import { runChatTurn } from "@/lib/ai";
+import { runChatTurn, runChatStep, type TurnState } from "@/lib/ai";
 import { ChatMessage } from "@/lib/db/models/ChatMessage";
 import { Conversation } from "@/lib/db/models/Conversation";
 import { AIAction } from "@/lib/db/models/AIAction";
@@ -12,6 +12,7 @@ import { checkRateLimit } from "@/lib/rateLimit";
 import { logger } from "@/lib/logger";
 
 const HISTORY_LIMIT = 12;
+export const maxDuration = 55;
 
 export async function POST(req: Request) {
   const userId = await getCurrentUserId();
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request", code: "VALIDATION_ERROR" }, { status: 400 });
   }
-  const { message, mode, model, conversationId: requestedConvoId } = parsed.data;
+  const { message, mode, model, conversationId: requestedConvoId, stream: isStreaming, turnState: incomingTurnState } = parsed.data;
 
   // Strict Suggest Mode isolation: if MONGODB_READONLY_URI is not configured, do not fall back to main env!
   if (mode === "suggest" && !process.env.MONGODB_READONLY_URI) {
@@ -45,26 +46,29 @@ export async function POST(req: Request) {
 
   // Find or create conversation
   let convo = requestedConvoId ? await Conversation.findOne({ _id: requestedConvoId, userId }) : null;
-  const initialTitle = message.trim().slice(0, 40) || "New Chat";
+  const initialTitle = message ? message.trim().slice(0, 40) || "New Chat" : "New Chat";
   if (!convo) {
     convo = await Conversation.create({
       userId,
       title: initialTitle,
     });
-  } else if (convo.title === "New Chat") {
+  } else if (convo.title === "New Chat" && message) {
     convo.title = initialTitle;
     await convo.save();
   }
 
   const activeConvoId = convo._id;
 
-  await ChatMessage.create({
-    userId,
-    conversationId: activeConvoId,
-    role: "user",
-    content: message,
-    mode,
-  });
+  // Only create user ChatMessage on the very first step of a turn
+  if (!incomingTurnState && message && message.trim()) {
+    await ChatMessage.create({
+      userId,
+      conversationId: activeConvoId,
+      role: "user",
+      content: message.trim(),
+      mode,
+    });
+  }
 
   const historyDocs = await ChatMessage.find({ userId, conversationId: activeConvoId })
     .sort({ createdAt: -1 })
@@ -75,21 +79,133 @@ export async function POST(req: Request) {
   const contextSnapshot = await buildContextSnapshot(userId);
   const systemPrompt = `${buildSystemPrompt(mode)}\n\n${contextSnapshot}`;
 
-  logger.info({ userId, mode, model, conversationId: String(activeConvoId), provider: process.env.AI_PROVIDER ?? "anthropic" }, "chat turn started");
+  logger.info(
+    { userId, mode, model, conversationId: String(activeConvoId), provider: process.env.AI_PROVIDER ?? "anthropic", isStep: Boolean(incomingTurnState) },
+    "chat step started"
+  );
 
+  // Streaming response mode
+  if (isStreaming) {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        function emit(data: Record<string, unknown>) {
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+          } catch {
+            // Stream might be closed by client
+          }
+        }
+
+        try {
+          const result = await runChatStep({
+            userId,
+            mode,
+            systemPrompt,
+            history: historyDocs.map((m) => ({
+              role: m.role === "assistant" ? "assistant" : "user",
+              content: m.content,
+            })),
+            message: incomingTurnState ? undefined : message,
+            model,
+            turnState: incomingTurnState as unknown as TurnState,
+            onProgress: (event) => {
+              emit({
+                type: event.type,
+                text: event.text,
+                toolName: event.toolName,
+                toolArgs: event.toolArgs,
+                isError: event.isError,
+              });
+            },
+          });
+
+          if (result.isFinal) {
+            const assistantMessage = await ChatMessage.create({
+              userId,
+              conversationId: activeConvoId,
+              role: "assistant",
+              content: result.replyText || "(done)",
+              mode,
+              relatedActionIds: result.createdActionIds,
+            });
+
+            await Conversation.updateOne({ _id: activeConvoId }, { $set: { updatedAt: new Date() } });
+
+            const proposals = result.createdActionIds.length
+              ? await AIAction.find({ _id: { $in: result.createdActionIds } }).lean()
+              : [];
+
+            emit({
+              type: "done",
+              isFinal: true,
+              reply: assistantMessage.content,
+              conversationId: String(convo._id),
+              conversationTitle: convo.title,
+              thinkingSteps: result.thinkingSteps ?? [],
+              proposals: proposals.map((p) => ({
+                id: String(p._id),
+                type: p.type,
+                summary: p.summary,
+                status: p.status,
+              })),
+            });
+          } else {
+            const proposals = result.createdActionIds.length
+              ? await AIAction.find({ _id: { $in: result.createdActionIds } }).lean()
+              : [];
+
+            emit({
+              type: "step_done",
+              isFinal: false,
+              nextTurnState: result.nextTurnState,
+              conversationId: String(convo._id),
+              thinkingSteps: result.thinkingSteps ?? [],
+              proposals: proposals.map((p) => ({
+                id: String(p._id),
+                type: p.type,
+                summary: p.summary,
+                status: p.status,
+              })),
+            });
+          }
+        } catch (err: unknown) {
+          if (req.signal.aborted) {
+            logger.info({ userId }, "chat stream aborted by client");
+            emit({ type: "stopped", text: "Generation stopped by user" });
+          } else {
+            const errorMsg = err instanceof Error ? err.message : "AI turn failed";
+            logger.error({ err, userId }, "chat stream turn failed");
+            emit({ type: "error", error: `Copilot error: ${errorMsg}` });
+          }
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    });
+  }
+
+  // Non-streaming fallback
   try {
-    const result = await Promise.race([
-      runChatTurn({
-        userId,
-        mode,
-        systemPrompt,
-        history: historyDocs.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
-        model,
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("AI response timed out after 35 seconds")), 35000)
-      ),
-    ]);
+    const collectedThinking: string[] = [];
+    const result = await runChatTurn({
+      userId,
+      mode,
+      systemPrompt,
+      history: historyDocs.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
+      model,
+      onProgress: (event) => {
+        if (event.type === "thinking") collectedThinking.push(event.text);
+      },
+    });
 
     const assistantMessage = await ChatMessage.create({
       userId,
@@ -110,6 +226,7 @@ export async function POST(req: Request) {
       reply: assistantMessage.content,
       conversationId: String(convo._id),
       conversationTitle: convo.title,
+      thinkingSteps: result.thinkingSteps ?? collectedThinking,
       proposals: proposals.map((p) => ({
         id: String(p._id),
         type: p.type,

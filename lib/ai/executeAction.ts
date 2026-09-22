@@ -110,6 +110,41 @@ export async function executeApprovedAction(
       return { deletedId: payload.scheduledTaskId };
     }
 
+    case "create-tasks-batch": {
+      const rawTasks = (payload.tasks as Array<Record<string, unknown>>) ?? [];
+      const docs = await Task.insertMany(
+        rawTasks.map((t) => ({
+          userId,
+          tabId: t.tabId,
+          title: t.title,
+          estimateMinutes: t.estimateMinutes ?? 60,
+          defaultTimerMinutes: t.defaultTimerMinutes ?? 30,
+          scheduledDate: t.scheduledDate ?? null,
+          description: t.description ?? "",
+          source: t.source ?? "ai-suggested",
+          aiAccepted: false,
+        }))
+      );
+      return { createdTasks: JSON.parse(JSON.stringify(docs)) };
+    }
+
+    case "update-sprint-log": {
+      const { GoalContext } = await import("@/lib/db/models/GoalContext");
+      const existing = await GoalContext.findOne({ userId });
+      const before = existing ? JSON.parse(JSON.stringify(existing)) : null;
+      const updated = await GoalContext.findOneAndUpdate(
+        { userId },
+        {
+          $set: {
+            aiSprintLog: payload.aiSprintLog,
+            lastSprintPlanDate: new Date(),
+          },
+        },
+        { upsert: true, new: true }
+      );
+      return { updated: JSON.parse(JSON.stringify(updated)), beforeLog: before?.aiSprintLog ?? "" };
+    }
+
     default:
       throw new Error(`Unknown action type: ${action.type}`);
   }
@@ -171,6 +206,23 @@ export async function undoExecutedAction(
         const { _id, __v, ...rest } = before;
         void __v; // discarded — Mongoose's internal version key, not part of the restore payload
         await Task.findOneAndUpdate({ _id, userId }, { $set: rest });
+      }
+      return;
+    }
+    case "create-tasks-batch": {
+      if (after && typeof after === "object" && Array.isArray((after as { createdTasks?: Array<{ _id: string }> }).createdTasks)) {
+        const ids = (after as { createdTasks: Array<{ _id: string }> }).createdTasks.map((t) => t._id);
+        await Task.updateMany({ _id: { $in: ids }, userId }, { $set: { status: "archived" } });
+      }
+      return;
+    }
+    case "update-sprint-log": {
+      if (after && (after as { beforeLog?: string }).beforeLog !== undefined) {
+        const { GoalContext } = await import("@/lib/db/models/GoalContext");
+        await GoalContext.findOneAndUpdate(
+          { userId },
+          { $set: { aiSprintLog: (after as { beforeLog: string }).beforeLog } }
+        );
       }
       return;
     }

@@ -1,10 +1,12 @@
-﻿@use "../../styles/tokens" as t;
+@use "../../styles/tokens" as t;
 
 .markdown {
-  font-size: 12.5px;
-  line-height: 1.55;
+  font-family: t.$font-chat;
+  font-size: 13px;
+  line-height: 1.6;
   color: t.$text-primary;
   word-break: break-word;
+  letter-spacing: -0.01em;
 
   p {
     margin: 0 0 8px;
@@ -79,5 +81,139 @@
     margin: 8px 0;
     color: t.$text-muted;
     font-style: italic;
+  }
+
+  // GFM Table styles
+  .tableWrap {
+    overflow-x: auto;
+    margin: 12px 0;
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid t.$border-subtle;
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  th {
+    background: t.$bg-elevated;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-bottom: 1px solid t.$border-subtle;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    color: #fff;
+    white-space: nowrap;
+
+    &:last-child {
+      border-right: none;
+    }
+  }
+
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    color: t.$text-primary;
+
+    &:last-child {
+      border-right: none;
+    }
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  tr:nth-child(even) td {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  tr:hover td {
+    background: rgba(167, 139, 250, 0.04);
+  }
+
+  // Mermaid diagram container
+  .mermaidWrap {
+    margin: 8px 0;
+    padding: 12px;
+    border-radius: 6px;
+    background: #111418;
+    border: 1px solid t.$border-subtle;
+    overflow: auto;
+
+    svg {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+  }
+
+  .mermaidErrorCard {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+  }
+
+  .mermaidErrorHeader {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #f87171;
+    margin-bottom: 4px;
+  }
+
+  .mermaidToggleBtn {
+    margin-left: auto;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    color: t.$text-muted;
+    font-size: 11px;
+    padding: 2px 7px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+    }
+  }
+
+  .mermaidErrorMsg {
+    font-size: 11.5px;
+    color: t.$text-muted;
+    line-height: 1.4;
+    word-break: break-word;
+  }
+
+  .mermaidErrorPre {
+    margin-top: 8px;
+    background: #0b0f14;
+    border: 1px solid t.$border-subtle;
+    border-radius: 4px;
+    padding: 8px;
+    font-family: t.$font-mono;
+    font-size: 11px;
+    color: #cbd5e1;
+    overflow-x: auto;
+  }
+
+  // Link styles
+  a {
+    color: t.$accent-ai;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
   }
 }

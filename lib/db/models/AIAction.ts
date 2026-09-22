@@ -7,6 +7,7 @@ const AIActionSchema = new Schema(
       type: String,
       enum: [
         "create-task",
+        "create-tasks-batch",
         "update-task",
         "move-task",
         "set-schedule",
@@ -14,6 +15,7 @@ const AIActionSchema = new Schema(
         "archive-task",
         "create-scheduled-task",
         "delete-scheduled-task",
+        "update-sprint-log",
       ],
       required: true,
     },

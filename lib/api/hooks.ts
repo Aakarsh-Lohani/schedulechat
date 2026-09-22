@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api/fetcher";
-import type { TabDTO, TaskDTO, ActiveTimersDTO, AIActionDTO, ChatReplyDTO, AnalyticsDataDTO, ConversationDTO } from "@/lib/api/types";
+import type { TabDTO, TaskDTO, ActiveTimersDTO, AIActionDTO, ChatReplyDTO, AnalyticsDataDTO, ConversationDTO, GoalContextDTO } from "@/lib/api/types";
 
 // ---- Tabs ----
 
@@ -294,7 +294,7 @@ export function useChatHistory(conversationId?: string | null) {
     queryKey: ["chat-history", conversationId ?? "default"],
     queryFn: () => {
       const url = conversationId ? `/api/chat/history?conversationId=${conversationId}` : "/api/chat/history";
-      return apiFetch<{ messages: { role: "user" | "assistant"; content: string }[] }>(url).then((r) => r.messages);
+      return apiFetch<{ messages: { role: "user" | "assistant"; content: string; thinkingContent?: string }[] }>(url).then((r) => r.messages);
     },
   });
 }
@@ -447,6 +447,30 @@ export function useNotificationAction() {
       qc.invalidateQueries({ queryKey: ["notifications"] });
       qc.invalidateQueries({ queryKey: ["timers", "active"] });
       qc.invalidateQueries({ queryKey: ["analytics"] });
+    },
+  });
+}
+
+// ---- Goals & Context ----
+
+export function useGoalContext() {
+  return useQuery({
+    queryKey: ["goal-context"],
+    queryFn: () =>
+      apiFetch<{ goalContext: GoalContextDTO }>("/api/goals").then((r) => r.goalContext),
+  });
+}
+
+export function useUpdateGoalContext() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { userGoalsMarkdown?: string; aiSprintLog?: string }) =>
+      apiFetch<{ goalContext: GoalContextDTO }>("/api/goals", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["goal-context"] });
     },
   });
 }

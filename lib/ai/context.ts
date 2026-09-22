@@ -1,6 +1,7 @@
 import { Task } from "@/lib/db/models/Task";
 import { Tab } from "@/lib/db/models/Tab";
 import { TimerSession } from "@/lib/db/models/TimerSession";
+import { GoalContext } from "@/lib/db/models/GoalContext";
 import { formatDuration } from "@/lib/timers/budget";
 
 function startOfToday(): Date {
@@ -10,17 +11,17 @@ function startOfToday(): Date {
 }
 
 /**
- * A tight, human-readable snapshot of the board — not the whole DB. Read tools
- * exist for the model to pull more detail on demand rather than force-feeding
- * everything every turn (see architecture/01-critical-components.md §F).
+ * A tight, human-readable snapshot of the board and long-term goals context.
+ * Injects user goals, study limits, sprint memory, current tasks, and timers.
  */
 export async function buildContextSnapshot(userId: string): Promise<string> {
-  const [tabs, todaysTasks, activeSessions] = await Promise.all([
+  const [tabs, todaysTasks, activeSessions, goalContext] = await Promise.all([
     Tab.find({ userId, status: "active" }).sort({ order: 1 }).lean(),
     Task.find({ userId, scheduledDate: { $gte: startOfToday() }, status: { $ne: "archived" } }).lean(),
     TimerSession.find({ userId, status: { $in: ["countdown", "running"] } })
       .populate("taskId", "title")
       .lean(),
+    GoalContext.findOne({ userId }).lean(),
   ]);
 
   const tabLines = tabs.map((t) => `- ${t.name}`).join("\n") || "(none)";
@@ -40,8 +41,25 @@ export async function buildContextSnapshot(userId: string): Promise<string> {
       .map((s) => `- Slot ${s.slot}: ${s.status} on "${(s.taskId as unknown as { title?: string })?.title}"`)
       .join("\n") || "(both timer slots idle)";
 
+  const now = new Date();
+  const dateHeader = `Current date: ${now.toISOString().slice(0, 10)} (${now.toLocaleDateString("en-US", { weekday: "long" })})`;
+
+  const goalSections = goalContext
+    ? [
+        "### Long-Term Goals & Study Limits",
+        goalContext.userGoalsMarkdown || "(no custom goals set yet)",
+        "",
+        "### AI Sprint Memory & Log",
+        goalContext.aiSprintLog || "(no sprint history yet)",
+      ]
+    : [
+        "### Daily Study Limits & Constraints",
+        "- Weekdays (Mon–Fri): Max 8 hours/day (480 minutes)",
+        "- Weekends (Sat–Sun): Max 10 hours/day (600 minutes)",
+      ];
+
   return [
-    "## Current board snapshot",
+    `## Current board snapshot (${dateHeader})`,
     "",
     "### Tabs",
     tabLines,
@@ -51,5 +69,7 @@ export async function buildContextSnapshot(userId: string): Promise<string> {
     "",
     "### Timer slots",
     timerLines,
+    "",
+    ...goalSections,
   ].join("\n");
 }

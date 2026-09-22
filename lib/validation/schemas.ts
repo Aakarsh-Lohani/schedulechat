@@ -56,16 +56,10 @@ export const extendTimerSchema = z.object({
 });
 
 export const chatRequestSchema = z.object({
-  message: z.string().min(1).max(4000),
+  message: z.string().max(4000).optional().default(""),
   mode: z.enum(["suggest", "update"]),
-  model: z
-    .enum([
-      "gemini-3.8-flash",
-      "gemini-3.7-flash",
-      "gemini-3.6-flash",
-      "gemini-3.5-flash",
-      "gemini-3.1-pro",
-    ])
-    .optional(),
+  model: z.string().optional(),
   conversationId: objectIdString.optional(),
+  stream: z.boolean().optional(),
+  turnState: z.record(z.string(), z.unknown()).optional(),
 });

@@ -20,6 +20,7 @@ export async function GET() {
       createdAt: a.createdAt,
       executedAt: a.executedAt,
       undoneAt: a.undoneAt,
+      proposedPayload: a.proposedPayload as Record<string, unknown>,
     })),
   });
 }

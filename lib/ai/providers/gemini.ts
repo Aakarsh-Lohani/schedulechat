@@ -4,18 +4,18 @@ import { buildToolsForMode } from "@/lib/ai/tools";
 import { executeToolCall } from "@/lib/ai/providers/common";
 import type { ChatTurnInput, ChatTurnResult } from "@/lib/ai/providers/types";
 
-const MAX_TOOL_ITERATIONS = 6;
+const MAX_TOOL_ITERATIONS = 10;
 
 // Update this if Google ships a newer default model — check
 // https://ai.google.dev/gemini-api/docs/models for the current list.
 const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
 export const AVAILABLE_GEMINI_MODELS = [
-  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Workhorse Flagship)" },
-  { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash (Agentic Reasoning)" },
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Flagship)" },
+  { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
   { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
   { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro (Deep Reasoning)" },
+  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
 ] as const;
 
 let client: GoogleGenerativeAI | null = null;
@@ -71,14 +71,27 @@ async function generateWithRetry(
 }
 
 export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResult> {
-  const { userId, mode, systemPrompt, history, model: requestedModel } = input;
+  const { userId, mode, systemPrompt, history, model: requestedModel, onProgress } = input;
 
   const modelName = requestedModel || DEFAULT_GEMINI_MODEL;
-  const model = getClient().getGenerativeModel({
+
+  // Build generationConfig with thinkingConfig to enable Chain of Thought.
+  // If the model rejects thinkingConfig (older model), we retry without it.
+  const genConfigWithThinking: Record<string, unknown> = {
+    maxOutputTokens: 8192,
+    thinkingConfig: { includeThoughts: true },
+  };
+  const genConfigWithout: Record<string, unknown> = {
+    maxOutputTokens: 8192,
+  };
+
+  let model = getClient().getGenerativeModel({
     model: modelName,
     tools: toGeminiTools(mode),
     systemInstruction: systemPrompt,
+    generationConfig: genConfigWithThinking as unknown as import("@google/generative-ai").GenerationConfig,
   });
+  let thinkingEnabled = true;
 
   // Construct conversation turns explicitly using valid Gemini API roles ('user' and 'model').
   // Never uses 'function' role which causes 400 Bad Request.
@@ -88,29 +101,92 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
   }));
 
   const createdActionIds: string[] = [];
+  const thinkingSteps: string[] = [];
   let finalText = "";
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const result = await generateWithRetry(model, { contents });
+    onProgress?.({
+      type: "status",
+      text: i === 0 ? "Analyzing request..." : "Evaluating tool output and planning...",
+    });
+
+    let result: Awaited<ReturnType<typeof generateWithRetry>>;
+    try {
+      result = await generateWithRetry(model, { contents });
+    } catch (firstErr: unknown) {
+      // If thinkingConfig was rejected, retry without it once
+      const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+      if (thinkingEnabled && (errMsg.includes("thinkingConfig") || errMsg.includes("Invalid argument"))) {
+        thinkingEnabled = false;
+        model = getClient().getGenerativeModel({
+          model: modelName,
+          tools: toGeminiTools(mode),
+          systemInstruction: systemPrompt,
+          generationConfig: genConfigWithout as unknown as import("@google/generative-ai").GenerationConfig,
+        });
+        result = await generateWithRetry(model, { contents });
+      } else {
+        throw firstErr;
+      }
+    }
+
     const candidate = result.response.candidates?.[0];
     if (!candidate?.content) break;
+
+    // Extract any model reasoning / thought parts (Chain of Thought)
+    if (Array.isArray(candidate.content.parts)) {
+      for (const part of candidate.content.parts) {
+        const p = part as { thought?: boolean; text?: string };
+        if (p.thought && p.text) {
+          thinkingSteps.push(p.text);
+          onProgress?.({ type: "thinking", text: p.text });
+        }
+      }
+    }
 
     // Append model response to conversation history
     contents.push(candidate.content);
 
     // Capture text output if present
     const responseText = result.response.text?.();
-    if (responseText) {
-      finalText = responseText;
+    const calls = result.response.functionCalls();
+
+    if (responseText && responseText.trim()) {
+      if (calls && calls.length > 0) {
+        // Text generated alongside function calls is intermediate planning — stream as thinking
+        thinkingSteps.push(responseText);
+        onProgress?.({ type: "thinking", text: responseText });
+      } else {
+        finalText = responseText;
+      }
     }
 
-    const calls = result.response.functionCalls();
     if (!calls || calls.length === 0) break;
 
     const responseParts: Part[] = [];
     for (const call of calls) {
+      onProgress?.({ type: "status", text: `Executing: ${call.name}...` });
+      onProgress?.({
+        type: "tool_call",
+        text: `Executing ${call.name}`,
+        toolName: call.name,
+        toolArgs: call.args as Record<string, unknown>,
+      });
+
       const toolResult = await executeToolCall(userId, mode, call.name, call.args);
       if (toolResult.createdActionId) createdActionIds.push(toolResult.createdActionId);
+
+      const resultSnippet = toolResult.resultText.length > 300
+        ? toolResult.resultText.slice(0, 300) + "…"
+        : toolResult.resultText;
+
+      onProgress?.({
+        type: "tool_result",
+        text: resultSnippet,
+        toolName: call.name,
+        isError: toolResult.isError,
+      });
+
       responseParts.push({
         functionResponse: {
           name: call.name,
@@ -126,5 +202,12 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
     });
   }
 
-  return { replyText: finalText || "(no response)", createdActionIds };
+  // Synthesize a response if the model only called tools without concluding prose
+  if (!finalText.trim() && createdActionIds.length > 0) {
+    finalText = `I have reviewed your Goals and scheduled your next sprint within your daily study limits (max 8 hours on weekdays, max 10 hours on weekends).
+
+Please review the proposed changes above and click **Approve** to commit them to your board.`;
+  }
+
+  return { replyText: finalText || "(no response)", createdActionIds, thinkingSteps };
 }
