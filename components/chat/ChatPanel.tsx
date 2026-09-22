@@ -1114,19 +1114,19 @@ export function ChatPanel() {
               className={`${styles.controlToggleBtn} ${dockedPanel === "commands" ? styles.active : ""}`}
               onClick={() => setDockedPanel((cur) => (cur === "commands" ? null : "commands"))}
               title="Special commands"
+              aria-label="Special commands"
             >
-              <Zap size={12} />
-              <span>Commands</span>
+              <Zap size={13} />
             </button>
 
             <button
               type="button"
               className={`${styles.controlToggleBtn} ${dockedPanel === "changes" ? styles.active : ""}`}
               onClick={() => setDockedPanel((cur) => (cur === "changes" ? null : "changes"))}
-              title="Recent AI changes"
+              title={`Recent AI changes${recentHistory.length > 0 ? ` (${recentHistory.length})` : ""}`}
+              aria-label="Recent AI changes"
             >
-              <History size={12} />
-              <span>Changes{recentHistory.length > 0 ? ` (${recentHistory.length})` : ""}</span>
+              <History size={13} />
             </button>
           </div>
 

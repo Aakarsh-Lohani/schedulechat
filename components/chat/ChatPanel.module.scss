@@ -184,16 +184,13 @@
   background: t.$bg-elevated;
   border: 1px solid t.$border-subtle;
   color: t.$text-muted;
-  border-radius: 999px;
-  padding: 3px 9px;
-  font-size: 11px;
-  font-weight: 500;
+  border-radius: 6px;
+  padding: 4px 7px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   transition: all 0.15s ease;
-  white-space: nowrap;
 
   &:hover {
     color: t.$text-primary;
@@ -201,10 +198,9 @@
   }
 
   &.active {
-    background: rgba(167, 139, 250, 0.16);
+    background: rgba(167, 139, 250, 0.18);
     border-color: t.$accent-ai;
     color: #c4b5fd;
-    font-weight: 600;
   }
 }
 
