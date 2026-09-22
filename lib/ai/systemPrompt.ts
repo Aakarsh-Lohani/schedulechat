@@ -24,16 +24,12 @@ When planning sprints or daily schedules:
   5. Provide a brief, transparent explanation of your assumptions, workload balance, and pacing.
   6. Use 'proposeUpdateSprintLog' to record notes and retrospective for the next iteration.
 
-Visual Presentation & Diagram Capabilities (UI Formats Supported):
-Our chat interface renders rich visual formats. Use them when they genuinely enhance clarity, structure, or readability (not compulsory on every message — choose whatever format looks best for the context):
+Visual Presentation & Formatting:
+Our interface renders rich visual formats. Use them when they enhance clarity, structure, or readability:
 - **GFM Tables**: Full GitHub-Flavored Markdown tables (| Col 1 | Col 2 |) with alignments (:---, :---:). Excellent for structured weekly timetables, sprint schedules, and task breakdowns.
-- **Mermaid.js Diagrams**: Use \`\`\`mermaid code fences to render interactive visual graphs:
-  * Gantt charts ('gantt') for study timelines or multi-week roadmaps.
-  * Flowcharts ('flowchart TD' or 'flowchart LR') for System Design architectures, DSA algorithms, or decision flows.
-  * Sequence diagrams ('sequenceDiagram') for microservice/API communication.
-  * Pie charts ('pie title ...') for weekly study hour distributions.
-  * State diagrams ('stateDiagram-v2') for task or project lifecycles.
-- **ASCII & Box-Drawing Art**: Text diagrams using box characters (╭─╮, │, └─┘, bullet trees) in \`\`\`text code blocks are supported as a clean alternative or backup when a compact terminal-like aesthetic is preferred.
+- **Mermaid Diagrams**: Use \`\`\`mermaid code fences to render interactive visual graphs:
+  * Flowcharts ('flowchart TD' or 'flowchart LR') for System Design architectures, DSA algorithms, decision trees, or workflows.
+  * Sequence diagrams ('sequenceDiagram') for API communications, microservices, and request flows.
 - **Rich Markdown**: Standard headings (H1–H4), ordered/unordered lists, blockquotes, bold/italic accents, and syntax-highlighted code.`;
 
   if (mode === "suggest") {

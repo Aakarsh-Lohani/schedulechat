@@ -81,7 +81,7 @@ function ThoughtStepAccordion({
       </div>
       {open && (
         <div className={styles.thoughtAccordionBody}>
-          <MarkdownContent content={content} />
+          <MarkdownContent content={content} allowMermaid={false} />
         </div>
       )}
     </div>

@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useMemo, useEffect, useRef, useState } from "react";
+import { AlertCircle } from "lucide-react";
 import styles from "./MarkdownContent.module.scss";
 
 interface MarkdownContentProps {
   content: string;
   className?: string;
+  allowMermaid?: boolean;
 }
 
 /**
@@ -63,14 +65,21 @@ function renderInlineText(text: string): React.ReactNode[] {
 function MermaidBlock({ chart }: { chart: string }) {
   const [svg, setSvg] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [showCode, setShowCode] = useState<boolean>(false);
   const id = useRef(`mermaid-${Math.random().toString(36).substring(2, 9)}`);
 
   useEffect(() => {
     let isMounted = true;
+
     (async () => {
       try {
         const m = (await import("mermaid")).default;
-        m.initialize({ startOnLoad: false, theme: "dark" });
+        m.initialize({
+          startOnLoad: false,
+          theme: "dark",
+          suppressErrorRendering: true,
+        });
+
         const { svg: renderedSvg } = await m.render(id.current, chart);
         if (isMounted) {
           setSvg(renderedSvg);
@@ -78,10 +87,11 @@ function MermaidBlock({ chart }: { chart: string }) {
         }
       } catch (err: any) {
         if (isMounted) {
-          setError(err.message || "Failed to render mermaid chart");
+          setError(err?.message || "Failed to render diagram");
         }
       }
     })();
+
     return () => {
       isMounted = false;
     };
@@ -89,9 +99,24 @@ function MermaidBlock({ chart }: { chart: string }) {
 
   if (error) {
     return (
-      <div className={styles.mermaidWrap}>
-        <pre className={styles.mermaidError}>{chart}</pre>
-        <div style={{ color: "#ff4d4f", fontSize: "0.85em" }}>{error}</div>
+      <div className={styles.mermaidErrorCard}>
+        <div className={styles.mermaidErrorHeader}>
+          <AlertCircle size={13} />
+          <span>Diagram Render Error</span>
+          <button
+            type="button"
+            className={styles.mermaidToggleBtn}
+            onClick={() => setShowCode((v) => !v)}
+          >
+            {showCode ? "Hide code" : "View code"}
+          </button>
+        </div>
+        <div className={styles.mermaidErrorMsg}>{error}</div>
+        {showCode && (
+          <pre className={styles.mermaidErrorPre}>
+            <code>{chart}</code>
+          </pre>
+        )}
       </div>
     );
   }
@@ -104,7 +129,7 @@ function MermaidBlock({ chart }: { chart: string }) {
   );
 }
 
-export function MarkdownContent({ content, className }: MarkdownContentProps) {
+export function MarkdownContent({ content, className, allowMermaid = true }: MarkdownContentProps) {
   const blocks = useMemo(() => {
     const lines = content.trim().split("\n");
     const result: React.ReactNode[] = [];
@@ -208,7 +233,7 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
     function flushCodeBlock() {
       if (codeBlockLines.length > 0) {
         const code = codeBlockLines.join("\n");
-        if (codeBlockLang === "mermaid") {
+        if (codeBlockLang === "mermaid" && allowMermaid !== false) {
           result.push(<MermaidBlock key={`mermaid-${result.length}`} chart={code} />);
         } else {
           result.push(
@@ -359,7 +384,7 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
     flushCodeBlock();
 
     return result;
-  }, [content]);
+  }, [content, allowMermaid]);
 
   return <div className={`${styles.markdown} ${className ?? ""}`}>{blocks}</div>;
 }

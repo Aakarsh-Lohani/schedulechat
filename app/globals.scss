@@ -42,3 +42,20 @@ select {
   outline: 2px solid t.$accent-timer;
   outline-offset: 2px;
 }
+
+// Prevent any stray Mermaid error SVGs, sandboxes, or debug containers from polluting document.body
+body > svg[id^="mermaid-"],
+body > [id^="dmermaid-"],
+body > div[id^="dmermaid-"],
+body > .mermaid {
+  display: none !important;
+  visibility: hidden !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
