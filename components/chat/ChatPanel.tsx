@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Sparkles,
@@ -42,6 +42,49 @@ interface LocalMessage {
   traceSteps?: TraceStep[];
   error?: string;
   isStopped?: boolean;
+}
+
+/** Individual collapsible thought step with Markdown support, open by default but collapsible by user. */
+function ThoughtStepAccordion({
+  title,
+  content,
+}: {
+  title?: string;
+  content: string;
+}) {
+  const [open, setOpen] = useState(true);
+
+  // Derive a smart title from the first heading or bold title in the thought content
+  const derivedTitle = useMemo(() => {
+    if (title && title !== "Reasoning" && title.trim()) return title.trim();
+    const lines = content.trim().split("\n");
+    for (const l of lines) {
+      const clean = l.replace(/^[#*\s-]+/, "").replace(/[*_`]/g, "").trim();
+      if (clean && clean.length > 2) {
+        return clean.length > 55 ? clean.slice(0, 55) + "…" : clean;
+      }
+    }
+    return "Reasoning";
+  }, [title, content]);
+
+  return (
+    <div className={styles.thoughtAccordionItem}>
+      <div className={styles.thoughtAccordionHeader} onClick={() => setOpen((v) => !v)}>
+        <div className={styles.thoughtAccordionTitle}>
+          <Sparkles size={11} className={styles.thoughtIcon} />
+          <span>{derivedTitle}</span>
+        </div>
+        <div className={styles.thoughtAccordionChevron}>
+          {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+        </div>
+      </div>
+      {open && (
+        <div className={styles.thoughtAccordionBody}>
+          <MarkdownContent content={content} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** Collapsible thinking accordion, used live during generation and permanently on completed messages. */
@@ -118,13 +161,11 @@ function ThinkingAccordion({
 
                 if (step.kind === "thought") {
                   return (
-                    <div key={step.id} className={styles.traceThoughtItem}>
-                      <div className={styles.traceThoughtHead}>
-                        <Sparkles size={11} className={styles.thoughtIcon} />
-                        <span>Reasoning</span>
-                      </div>
-                      <div className={styles.traceThoughtBody}>{step.detail || step.title}</div>
-                    </div>
+                    <ThoughtStepAccordion
+                      key={step.id}
+                      title={step.title}
+                      content={step.detail || step.title}
+                    />
                   );
                 }
 
@@ -137,7 +178,7 @@ function ThinkingAccordion({
               })}
             </div>
           ) : (
-            content && <div className={styles.rawThoughtText}>{content}</div>
+            content && <ThoughtStepAccordion content={content} />
           )}
         </div>
       )}

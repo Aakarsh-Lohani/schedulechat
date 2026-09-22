@@ -5,6 +5,7 @@ import styles from "./MarkdownContent.module.scss";
 
 interface MarkdownContentProps {
   content: string;
+  className?: string;
 }
 
 /**
@@ -59,14 +60,6 @@ function renderInlineText(text: string): React.ReactNode[] {
   return parts;
 }
 
-function normalizeMarkdown(text: string): string {
-  return text
-    .replace(/([^\n])\s*(#{1,6}\s+)/g, "$1\n\n$2")
-    .replace(/([^\n])\s*(---\s*)/g, "$1\n\n---\n\n")
-    .replace(/([^\n])\s*(-\s+\*\*)/g, "$1\n$2")
-    .replace(/([^\n])\s*(-\s+)/g, "$1\n$2");
-}
-
 function MermaidBlock({ chart }: { chart: string }) {
   const [svg, setSvg] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -111,10 +104,9 @@ function MermaidBlock({ chart }: { chart: string }) {
   );
 }
 
-export function MarkdownContent({ content }: MarkdownContentProps) {
+export function MarkdownContent({ content, className }: MarkdownContentProps) {
   const blocks = useMemo(() => {
-    const normalized = normalizeMarkdown(content.trim());
-    const lines = normalized.split("\n");
+    const lines = content.trim().split("\n");
     const result: React.ReactNode[] = [];
 
     let currentList: string[] = [];
@@ -233,12 +225,20 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
       codeBlockLang = "";
     }
 
+    const isTableSeparator = (l: string | undefined): boolean => {
+      if (!l) return false;
+      const t = l.trim();
+      if (!t.includes("|") || !t.includes("-")) return false;
+      const inner = t.replace(/^\|/, "").replace(/\|$/, "");
+      const parts = inner.split("|");
+      return parts.length >= 1 && parts.every((p) => /^\s*:?-{2,}:?\s*$/.test(p));
+    };
+
     const parseTableRow = (rLine: string) => {
-      return rLine
-        .replace(/^\|/, "")
-        .replace(/\|$/, "")
-        .split("|")
-        .map((cell) => cell.trim());
+      let cleaned = rLine.trim();
+      if (cleaned.startsWith("|")) cleaned = cleaned.slice(1);
+      if (cleaned.endsWith("|")) cleaned = cleaned.slice(0, -1);
+      return cleaned.split("|").map((cell) => cell.trim());
     };
 
     for (let i = 0; i < lines.length; i++) {
@@ -266,7 +266,14 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
         continue;
       }
 
-      if (line === "---" || line === "***" || line === "___") {
+      if (
+        line === "---" ||
+        line === "***" ||
+        line === "___" ||
+        /^---+$/.test(line) ||
+        /^\*\*\*+$/.test(line) ||
+        /^___+$/.test(line)
+      ) {
         flushAllTextBlocks();
         result.push(<hr key={`hr-${result.length}`} />);
         continue;
@@ -309,22 +316,18 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
         continue;
       }
 
-      if (line.startsWith("|") && line.endsWith("|")) {
+      if (line.startsWith("|")) {
         flushList();
         flushOrderedList();
         flushBlockquote();
         
         if (!inTable) {
           const nextLine = lines[i + 1]?.trim();
-          if (
-            nextLine &&
-            nextLine.startsWith("|") &&
-            nextLine.includes("---")
-          ) {
+          if (isTableSeparator(nextLine)) {
             inTable = true;
             tableHeaders = parseTableRow(line);
             
-            const aligns = parseTableRow(nextLine);
+            const aligns = parseTableRow(nextLine!);
             tableAlignments = aligns.map((a) => {
               const start = a.startsWith(":");
               const end = a.endsWith(":");
@@ -340,6 +343,9 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
             continue;
           }
         } else {
+          if (isTableSeparator(line)) {
+            continue;
+          }
           tableRows.push(parseTableRow(line));
           continue;
         }
@@ -355,5 +361,5 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
     return result;
   }, [content]);
 
-  return <div className={styles.markdown}>{blocks}</div>;
+  return <div className={`${styles.markdown} ${className ?? ""}`}>{blocks}</div>;
 }

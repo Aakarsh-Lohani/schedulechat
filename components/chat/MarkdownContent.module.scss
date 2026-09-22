@@ -1,10 +1,12 @@
 @use "../../styles/tokens" as t;
 
 .markdown {
-  font-size: 12.5px;
-  line-height: 1.55;
+  font-family: t.$font-chat;
+  font-size: 13px;
+  line-height: 1.6;
   color: t.$text-primary;
   word-break: break-word;
+  letter-spacing: -0.01em;
 
   p {
     margin: 0 0 8px;
@@ -84,34 +86,55 @@
   // GFM Table styles
   .tableWrap {
     overflow-x: auto;
-    margin: 8px 0;
+    margin: 12px 0;
     width: 100%;
+    border-radius: 8px;
+    border: 1px solid t.$border-subtle;
+    background: rgba(0, 0, 0, 0.2);
   }
 
   table {
     width: 100%;
     border-collapse: collapse;
-    border: 1px solid t.$border-subtle;
     font-size: 12px;
+    line-height: 1.5;
   }
 
   th {
     background: t.$bg-elevated;
     font-weight: 600;
-    padding: 6px 10px;
-    border: 1px solid t.$border-subtle;
+    padding: 8px 12px;
+    border-bottom: 1px solid t.$border-subtle;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
     color: #fff;
     white-space: nowrap;
+
+    &:last-child {
+      border-right: none;
+    }
   }
 
   td {
-    padding: 6px 10px;
-    border: 1px solid t.$border-subtle;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
     color: t.$text-primary;
+
+    &:last-child {
+      border-right: none;
+    }
+  }
+
+  tr:last-child td {
+    border-bottom: none;
   }
 
   tr:nth-child(even) td {
     background: rgba(255, 255, 255, 0.02);
+  }
+
+  tr:hover td {
+    background: rgba(167, 139, 250, 0.04);
   }
 
   // Mermaid diagram container

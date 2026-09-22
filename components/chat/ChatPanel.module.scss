@@ -319,9 +319,11 @@
 }
 
 .msg {
+  font-family: t.$font-chat;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
   max-width: 92%;
+  letter-spacing: -0.01em;
 }
 
 .user {
@@ -664,6 +666,53 @@
   word-break: break-word;
   max-height: 80px;
   overflow-y: auto;
+}
+
+.thoughtAccordionItem {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(167, 139, 250, 0.16);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.thoughtAccordionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 9px;
+  background: rgba(167, 139, 250, 0.05);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: rgba(167, 139, 250, 0.1);
+  }
+}
+
+.thoughtAccordionTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #c4b5fd;
+  font-family: t.$font-mono;
+}
+
+.thoughtAccordionChevron {
+  color: t.$text-muted;
+  display: flex;
+  align-items: center;
+}
+
+.thoughtAccordionBody {
+  padding: 8px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #d1d5db;
 }
 
 .traceThoughtItem {
