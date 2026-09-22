@@ -787,18 +787,151 @@
   }
 }
 
-.errorBanner {
+.errorAccordion {
+  margin-top: 8px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.errorAccordionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.12);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.18);
+  }
+}
+
+.errorAccordionTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #fca5a5;
+  font-size: 11.5px;
+  font-weight: 600;
+  min-width: 0;
+
+  span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.errorIcon {
+  color: #f87171;
+  flex-shrink: 0;
+}
+
+.errorAccordionRight {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
   color: #fca5a5;
+  flex-shrink: 0;
+}
+
+.errorBadge {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.errorAccordionBody {
+  padding: 10px 12px;
+  border-top: 1px solid rgba(239, 68, 68, 0.2);
   font-size: 11.5px;
-  line-height: 1.4;
+  line-height: 1.5;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.errorTableWrap {
+  overflow-x: auto;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.errorTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  table-layout: fixed;
+
+  tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+}
+
+.errorTableKey {
+  width: 105px;
+  padding: 5px 8px 5px 0;
+  color: #f87171;
+  font-weight: 600;
+  vertical-align: top;
+  font-family: t.$font-mono;
+  white-space: nowrap;
+}
+
+.errorTableVal {
+  padding: 5px 0 5px 8px;
+  color: #e7eaee;
+  vertical-align: top;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.rawErrorDetails {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: t.$text-muted;
+
+  summary {
+    cursor: pointer;
+    font-weight: 500;
+    user-select: none;
+    padding: 2px 0;
+
+    &:hover {
+      color: #e7eaee;
+    }
+  }
+}
+
+.rawErrorPre {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  font-family: t.$font-mono;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #fca5a5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow-y: auto;
 }
 
 .batchTasksList {

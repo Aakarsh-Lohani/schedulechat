@@ -186,6 +186,180 @@ function ThinkingAccordion({
   );
 }
 
+interface ParsedErrorInfo {
+  title: string;
+  tableData: Array<{ key: string; value: React.ReactNode }>;
+  raw: string;
+}
+
+function parseError(rawError: string): ParsedErrorInfo {
+  const clean = rawError.replace(/^Copilot error:\s*/i, "").trim();
+
+  // 1. Determine concise title
+  let title = "Copilot Error";
+  const is429 = /429|quota exceeded|too many requests|rate limit/i.test(clean);
+  const isAuth = /401|403|unauthorized|api key|forbidden/i.test(clean);
+  const isTimeout = /504|timeout|timed out|took longer/i.test(clean);
+  const isServer = /500|502|503|internal server error|bad gateway/i.test(clean);
+
+  if (is429) title = "Rate Limit / Quota Exceeded (429)";
+  else if (isAuth) title = "Authentication / API Key Error";
+  else if (isTimeout) title = "Gateway Timeout (504)";
+  else if (isServer) title = "AI Provider Service Error";
+  else {
+    const firstLine = clean.split("\n")[0] ?? "";
+    title = firstLine.length > 50 ? firstLine.slice(0, 50) + "…" : firstLine || "Copilot Error";
+  }
+
+  // 2. Extract structured fields for table
+  const rows: Array<{ key: string; value: React.ReactNode }> = [];
+
+  // Model
+  const modelMatch = clean.match(/model[:\s/]+([a-zA-Z0-9_.-]+)/i);
+  if (modelMatch?.[1]) {
+    rows.push({ key: "Model", value: modelMatch[1] });
+  }
+
+  // Status / Code
+  const statusMatch = clean.match(/\[(4\d\d|5\d\d)\s*([^\]]*)\]/i);
+  if (statusMatch) {
+    rows.push({ key: "Status", value: `${statusMatch[1]} ${statusMatch[2]}`.trim() });
+  }
+
+  // Retry Delay
+  const retryMatch = clean.match(/retry(?:Delay|\s+in)[:\s"]*([0-9.]+[a-z]?)/i);
+  if (retryMatch?.[1]) {
+    rows.push({ key: "Retry After", value: retryMatch[1] });
+  }
+
+  // Quota Metric / Limit
+  const limitMatch = clean.match(/limit:\s*(\d+)/i);
+  const quotaMatch = clean.match(/quotaMetric["']?\s*:\s*["']([^"']+)["']/i) || clean.match(/metric:\s*([a-zA-Z0-9_./-]+)/i);
+  const quotaName = quotaMatch?.[1] ? quotaMatch[1].split("/").pop() : undefined;
+  const limitCount = limitMatch?.[1];
+  if (quotaName || limitCount) {
+    rows.push({
+      key: "Quota",
+      value: `${limitCount ? `Limit: ${limitCount} requests` : "Exceeded"}${quotaName ? ` (${quotaName})` : ""}`,
+    });
+  }
+
+  // Extract JSON payload if present
+  const jsonMatch = clean.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+  const jsonStr = jsonMatch?.[1];
+  if (jsonStr) {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item["@type"]?.includes("QuotaFailure") && Array.isArray(item.violations)) {
+            const v = item.violations[0];
+            if (v?.quotaId && !rows.some((r) => r.key === "Quota ID")) {
+              rows.push({ key: "Quota ID", value: String(v.quotaId) });
+            }
+          }
+        }
+      } else if (typeof parsed === "object" && parsed !== null) {
+        if (parsed.error && typeof parsed.error === "object") {
+          const e = parsed.error as Record<string, unknown>;
+          if (e.message && !rows.some((r) => r.key === "Message")) {
+            rows.push({ key: "Message", value: String(e.message) });
+          }
+          if (e.type && !rows.some((r) => r.key === "Error Type")) {
+            rows.push({ key: "Error Type", value: String(e.type) });
+          }
+        }
+      }
+    } catch {
+      // ignore parse failure
+    }
+  }
+
+  // Reference Links
+  const linkMatches = Array.from(new Set(clean.match(/https?:\/\/[^\s"',\]}]+/g) || []));
+  if (linkMatches.length > 0) {
+    rows.push({
+      key: "Links",
+      value: (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {linkMatches.slice(0, 3).map((url, i) => (
+            <a
+              key={i}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "#a78bfa", textDecoration: "underline", wordBreak: "break-all" }}
+            >
+              {url.replace(/^https?:\/\//, "")}
+            </a>
+          ))}
+        </div>
+      ),
+    });
+  }
+
+  // General detail if not covered
+  if (!rows.some((r) => r.key === "Message")) {
+    const summaryMsg = clean
+      .replace(/\[GoogleGenerativeAI Error\]:?/gi, "")
+      .replace(/Error fetching from https?:\/\/[^\s:]+:?/gi, "")
+      .replace(/\[\d+[^\]]*\]/g, "")
+      .replace(/https?:\/\/[^\s]+/g, "")
+      .replace(/\[[\s\S]*\]$/g, "")
+      .trim();
+    if (summaryMsg && summaryMsg.length > 5) {
+      const displayMsg = summaryMsg.length > 220 ? summaryMsg.slice(0, 220) + "…" : summaryMsg;
+      rows.unshift({ key: "Details", value: displayMsg });
+    }
+  }
+
+  return { title, tableData: rows, raw: clean };
+}
+
+/** Expandable Error Accordion with structured key-value table and overflow protection */
+function ErrorAccordion({ error }: { error: string }) {
+  const [open, setOpen] = useState(false);
+  const parsed = useMemo(() => parseError(error), [error]);
+
+  return (
+    <div className={styles.errorAccordion}>
+      <div className={styles.errorAccordionHeader} onClick={() => setOpen((v) => !v)}>
+        <div className={styles.errorAccordionTitle}>
+          <AlertCircle size={13} className={styles.errorIcon} />
+          <span>{parsed.title}</span>
+        </div>
+        <div className={styles.errorAccordionRight}>
+          <span className={styles.errorBadge}>Error</span>
+          {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </div>
+      </div>
+
+      {open && (
+        <div className={styles.errorAccordionBody}>
+          {parsed.tableData.length > 0 && (
+            <div className={styles.errorTableWrap}>
+              <table className={styles.errorTable}>
+                <tbody>
+                  {parsed.tableData.map((row, idx) => (
+                    <tr key={idx}>
+                      <td className={styles.errorTableKey}>{row.key}</td>
+                      <td className={styles.errorTableVal}>{row.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <details className={styles.rawErrorDetails}>
+            <summary>Raw Provider Output</summary>
+            <pre className={styles.rawErrorPre}>{parsed.raw}</pre>
+          </details>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const GEMINI_MODELS = [
   { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Flagship)" },
   { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
@@ -714,12 +888,7 @@ export function ChatPanel() {
               />
             )}
             {m.role === "assistant" ? <MarkdownContent content={m.content} /> : m.content}
-            {m.error && (
-              <div className={styles.errorBanner}>
-                <AlertCircle size={12} />
-                <span>{m.error}</span>
-              </div>
-            )}
+            {m.error && <ErrorAccordion error={m.error} />}
           </div>
         ))}
 
