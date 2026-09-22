@@ -1,4 +1,4 @@
-﻿@use "../../styles/tokens" as t;
+@use "../../styles/tokens" as t;
 
 .markdown {
   font-size: 12.5px;
@@ -79,5 +79,66 @@
     margin: 8px 0;
     color: t.$text-muted;
     font-style: italic;
+  }
+
+  // GFM Table styles
+  .tableWrap {
+    overflow-x: auto;
+    margin: 8px 0;
+    width: 100%;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid t.$border-subtle;
+    font-size: 12px;
+  }
+
+  th {
+    background: t.$bg-elevated;
+    font-weight: 600;
+    padding: 6px 10px;
+    border: 1px solid t.$border-subtle;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 6px 10px;
+    border: 1px solid t.$border-subtle;
+    color: t.$text-primary;
+  }
+
+  tr:nth-child(even) td {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  // Mermaid diagram container
+  .mermaidWrap {
+    margin: 8px 0;
+    padding: 12px;
+    border-radius: 6px;
+    background: #111418;
+    border: 1px solid t.$border-subtle;
+    overflow: auto;
+  }
+
+  .mermaidError {
+    color: #ff4d4f;
+    font-family: t.$font-mono;
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+    font-size: 11px;
+  }
+
+  // Link styles
+  a {
+    color: t.$accent-ai;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
   }
 }

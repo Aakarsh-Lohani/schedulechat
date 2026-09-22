@@ -294,7 +294,7 @@ export function useChatHistory(conversationId?: string | null) {
     queryKey: ["chat-history", conversationId ?? "default"],
     queryFn: () => {
       const url = conversationId ? `/api/chat/history?conversationId=${conversationId}` : "/api/chat/history";
-      return apiFetch<{ messages: { role: "user" | "assistant"; content: string }[] }>(url).then((r) => r.messages);
+      return apiFetch<{ messages: { role: "user" | "assistant"; content: string; thinkingContent?: string }[] }>(url).then((r) => r.messages);
     },
   });
 }

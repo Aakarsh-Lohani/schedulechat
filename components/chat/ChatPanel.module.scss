@@ -515,6 +515,11 @@
   font-size: 12px;
 }
 
+.thinkingBoxCompleted {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 .thinkingHeader {
   display: flex;
   align-items: center;
@@ -561,7 +566,7 @@
   font-size: 11px;
   line-height: 1.5;
   white-space: pre-wrap;
-  max-height: 180px;
+  max-height: 300px;
   overflow-y: auto;
 }
 

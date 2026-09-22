@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useRef, useState } from "react";
 import styles from "./MarkdownContent.module.scss";
 
 interface MarkdownContentProps {
@@ -8,13 +8,11 @@ interface MarkdownContentProps {
 }
 
 /**
- * Parses inline formatting: **bold**, *italic*, `code`.
+ * Parses inline formatting: **bold**, *italic*, `code`, and [link](url).
  */
 function renderInlineText(text: string): React.ReactNode[] {
-  // Regex splitting by code tokens, bold tokens, italic tokens
   const parts: React.ReactNode[] = [];
-  // Tokenize regex
-  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_)/g;
+  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\))/g;
   let lastIdx = 0;
   let match: RegExpExecArray | null;
 
@@ -32,6 +30,22 @@ function renderInlineText(text: string): React.ReactNode[] {
       (token.startsWith("_") && token.endsWith("_"))
     ) {
       parts.push(<em key={match.index}>{token.slice(1, -1)}</em>);
+    } else if (token.startsWith("[") && token.includes("](")) {
+      const linkMatch = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token);
+      if (linkMatch && linkMatch[1] && linkMatch[2]) {
+        parts.push(
+          <a
+            key={match.index}
+            href={linkMatch[2]}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {renderInlineText(linkMatch[1])}
+          </a>
+        );
+      } else {
+        parts.push(token);
+      }
     } else {
       parts.push(token);
     }
@@ -45,19 +59,56 @@ function renderInlineText(text: string): React.ReactNode[] {
   return parts;
 }
 
-/**
- * Normalizes markdown text so inline section headings like "summary: ### **Today's Focus** - **item**"
- * are expanded with proper line breaks before block parsing.
- */
 function normalizeMarkdown(text: string): string {
   return text
-    // Ensure headings have a leading newline
     .replace(/([^\n])\s*(#{1,6}\s+)/g, "$1\n\n$2")
-    // Ensure horizontal rules have newlines
     .replace(/([^\n])\s*(---\s*)/g, "$1\n\n---\n\n")
-    // Ensure bullet points have a leading newline if preceded by non-newline
     .replace(/([^\n])\s*(-\s+\*\*)/g, "$1\n$2")
     .replace(/([^\n])\s*(-\s+)/g, "$1\n$2");
+}
+
+function MermaidBlock({ chart }: { chart: string }) {
+  const [svg, setSvg] = useState<string>("");
+  const [error, setError] = useState<string>("");
+  const id = useRef(`mermaid-${Math.random().toString(36).substring(2, 9)}`);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const m = (await import("mermaid")).default;
+        m.initialize({ startOnLoad: false, theme: "dark" });
+        const { svg: renderedSvg } = await m.render(id.current, chart);
+        if (isMounted) {
+          setSvg(renderedSvg);
+          setError("");
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setError(err.message || "Failed to render mermaid chart");
+        }
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [chart]);
+
+  if (error) {
+    return (
+      <div className={styles.mermaidWrap}>
+        <pre className={styles.mermaidError}>{chart}</pre>
+        <div style={{ color: "#ff4d4f", fontSize: "0.85em" }}>{error}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={styles.mermaidWrap}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
 }
 
 export function MarkdownContent({ content }: MarkdownContentProps) {
@@ -67,9 +118,19 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
     const result: React.ReactNode[] = [];
 
     let currentList: string[] = [];
+    let currentOrderedList: string[] = [];
+    
     let inCodeBlock = false;
     let codeBlockLang = "";
     let codeBlockLines: string[] = [];
+
+    let currentBlockquote: string[] = [];
+
+    // Table state
+    let tableHeaders: string[] = [];
+    let tableAlignments: React.CSSProperties["textAlign"][] = [];
+    let tableRows: string[][] = [];
+    let inTable = false;
 
     function flushList() {
       if (currentList.length > 0) {
@@ -84,31 +145,111 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
       }
     }
 
+    function flushOrderedList() {
+      if (currentOrderedList.length > 0) {
+        result.push(
+          <ol key={`ol-${result.length}`}>
+            {currentOrderedList.map((item, idx) => (
+              <li key={idx}>{renderInlineText(item)}</li>
+            ))}
+          </ol>
+        );
+        currentOrderedList = [];
+      }
+    }
+
+    function flushBlockquote() {
+      if (currentBlockquote.length > 0) {
+        result.push(
+          <blockquote key={`bq-${result.length}`}>
+            {currentBlockquote.map((item, idx) => (
+              <div key={idx}>{renderInlineText(item)}</div>
+            ))}
+          </blockquote>
+        );
+        currentBlockquote = [];
+      }
+    }
+
+    function flushTable() {
+      if (inTable && tableHeaders.length > 0) {
+        result.push(
+          <div className={styles.tableWrap} key={`table-${result.length}`}>
+            <table>
+              <thead>
+                <tr>
+                  {tableHeaders.map((header, idx) => (
+                    <th key={idx} style={{ textAlign: tableAlignments[idx] || "left" }}>
+                      {renderInlineText(header)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tableRows.map((row, rIdx) => (
+                  <tr key={rIdx}>
+                    {row.map((cell, cIdx) => (
+                      <td key={cIdx} style={{ textAlign: tableAlignments[cIdx] || "left" }}>
+                        {renderInlineText(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      inTable = false;
+      tableHeaders = [];
+      tableAlignments = [];
+      tableRows = [];
+    }
+
+    function flushAllTextBlocks() {
+      flushList();
+      flushOrderedList();
+      flushBlockquote();
+      flushTable();
+    }
+
     function flushCodeBlock() {
       if (codeBlockLines.length > 0) {
-        result.push(
-          <pre key={`pre-${result.length}`}>
-            <code className={codeBlockLang ? `language-${codeBlockLang}` : undefined}>
-              {codeBlockLines.join("\n")}
-            </code>
-          </pre>
-        );
+        const code = codeBlockLines.join("\n");
+        if (codeBlockLang === "mermaid") {
+          result.push(<MermaidBlock key={`mermaid-${result.length}`} chart={code} />);
+        } else {
+          result.push(
+            <pre key={`pre-${result.length}`}>
+              <code className={codeBlockLang ? `language-${codeBlockLang}` : undefined}>
+                {code}
+              </code>
+            </pre>
+          );
+        }
         codeBlockLines = [];
       }
       inCodeBlock = false;
       codeBlockLang = "";
     }
 
+    const parseTableRow = (rLine: string) => {
+      return rLine
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map((cell) => cell.trim());
+    };
+
     for (let i = 0; i < lines.length; i++) {
       const rawLine = lines[i] ?? "";
       const line = rawLine.trim();
 
-      // Code block start / end
       if (line.startsWith("```")) {
         if (inCodeBlock) {
           flushCodeBlock();
         } else {
-          flushList();
+          flushAllTextBlocks();
           inCodeBlock = true;
           codeBlockLang = line.slice(3).trim();
         }
@@ -120,22 +261,19 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
         continue;
       }
 
-      // Empty line
       if (!line) {
-        flushList();
+        flushAllTextBlocks();
         continue;
       }
 
-      // Horizontal rule
       if (line === "---" || line === "***" || line === "___") {
-        flushList();
+        flushAllTextBlocks();
         result.push(<hr key={`hr-${result.length}`} />);
         continue;
       }
 
-      // Headings
       if (line.startsWith("#")) {
-        flushList();
+        flushAllTextBlocks();
         const level = (line.match(/^#+/) || ["#"])[0].length;
         const text = line.replace(/^#+\s*/, "");
         if (level === 1) result.push(<h1 key={`h1-${result.length}`}>{renderInlineText(text)}</h1>);
@@ -145,27 +283,73 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
         continue;
       }
 
-      // Bullet lists (- or *)
+      if (line.startsWith("> ")) {
+        flushList();
+        flushOrderedList();
+        flushTable();
+        currentBlockquote.push(line.slice(2).trim());
+        continue;
+      }
+
       if (/^[-*]\s+/.test(line)) {
+        flushOrderedList();
+        flushBlockquote();
+        flushTable();
         const itemText = line.replace(/^[-*]\s+/, "");
         currentList.push(itemText);
         continue;
       }
 
-      // Numbered lists (1. , 2. )
       if (/^\d+\.\s+/.test(line)) {
         flushList();
+        flushBlockquote();
+        flushTable();
         const itemText = line.replace(/^\d+\.\s+/, "");
-        currentList.push(itemText);
+        currentOrderedList.push(itemText);
         continue;
       }
 
-      // Regular paragraph line
-      flushList();
+      if (line.startsWith("|") && line.endsWith("|")) {
+        flushList();
+        flushOrderedList();
+        flushBlockquote();
+        
+        if (!inTable) {
+          const nextLine = lines[i + 1]?.trim();
+          if (
+            nextLine &&
+            nextLine.startsWith("|") &&
+            nextLine.includes("---")
+          ) {
+            inTable = true;
+            tableHeaders = parseTableRow(line);
+            
+            const aligns = parseTableRow(nextLine);
+            tableAlignments = aligns.map((a) => {
+              const start = a.startsWith(":");
+              const end = a.endsWith(":");
+              if (start && end) return "center";
+              if (end) return "right";
+              return "left";
+            });
+            i++; 
+            continue;
+          } else {
+            flushAllTextBlocks();
+            result.push(<p key={`p-${result.length}`}>{renderInlineText(line)}</p>);
+            continue;
+          }
+        } else {
+          tableRows.push(parseTableRow(line));
+          continue;
+        }
+      }
+
+      flushAllTextBlocks();
       result.push(<p key={`p-${result.length}`}>{renderInlineText(line)}</p>);
     }
 
-    flushList();
+    flushAllTextBlocks();
     flushCodeBlock();
 
     return result;

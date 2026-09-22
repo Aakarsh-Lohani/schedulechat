@@ -33,6 +33,39 @@ import styles from "./ChatPanel.module.scss";
 interface LocalMessage {
   role: "user" | "assistant";
   content: string;
+  thinkingContent?: string;
+}
+
+/** Collapsible thinking accordion, used live during generation and permanently on completed messages. */
+function ThinkingAccordion({
+  content,
+  status,
+  isLive,
+}: {
+  content: string;
+  status?: string | null;
+  isLive: boolean;
+}) {
+  const [expanded, setExpanded] = useState(isLive);
+  const label = isLive
+    ? status || "Thinking & Planning..."
+    : "Thought process & tool execution";
+  return (
+    <div className={`${styles.thinkingBox} ${!isLive ? styles.thinkingBoxCompleted : ""}`}>
+      <div className={styles.thinkingHeader} onClick={() => setExpanded((v) => !v)}>
+        <div className={styles.thinkingTitle}>
+          {isLive ? (
+            <Sparkles size={13} className={styles.thinkingSpinner} />
+          ) : (
+            <Sparkles size={13} />
+          )}
+          <span>{label}</span>
+        </div>
+        {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+      </div>
+      {expanded && content && <div className={styles.thinkingContent}>{content}</div>}
+    </div>
+  );
 }
 
 const GEMINI_MODELS = [
@@ -117,7 +150,7 @@ export function ChatPanel() {
   const undoAction = useUndoAction();
 
   // Derived messages for current conversation thread
-  const messages = [...(history ?? []), ...newMessages];
+  const messages: LocalMessage[] = [...(history ?? []), ...newMessages];
 
   // Drag resizing for Copilot width
   function handleStartResize(e: React.MouseEvent) {
@@ -207,41 +240,56 @@ export function ChatPanel() {
       const decoder = new TextDecoder();
       let buffer = "";
       let finalReply = "";
+      let accumulatedThinking = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() ?? "";
+        // Split on double newlines (SSE spec), handle both \n\n and \r\n\r\n
+        const chunks = buffer.split(/\r?\n\r?\n/);
+        buffer = chunks.pop() ?? "";
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
+        for (const chunk of chunks) {
+          const dataLine = chunk.split(/\r?\n/).find((l) => l.startsWith("data:"));
+          if (!dataLine) continue;
+          const jsonStr = dataLine.slice(dataLine.indexOf(":") + 1).trim();
+          if (!jsonStr) continue;
+          let data: { type: string; text?: string; reply?: string; error?: string; conversationId?: string; conversationTitle?: string };
           try {
-            const data = JSON.parse(line.slice(6));
-            if (data.type === "status") {
-              setLiveStatus(data.text);
-            } else if (data.type === "thinking") {
-              setLiveThinking((prev) => prev + (prev ? "\n" : "") + data.text);
-            } else if (data.type === "done") {
-              finalReply = data.reply;
-              if (data.conversationId && data.conversationId !== activeConversationId) {
-                setActiveConversationId(data.conversationId);
-              }
-              qc.invalidateQueries({ queryKey: ["ai-actions"] });
-              qc.invalidateQueries({ queryKey: ["conversations"] });
-              qc.invalidateQueries({ queryKey: ["goal-context"] });
-            } else if (data.type === "error") {
-              throw new Error(data.error);
-            }
+            data = JSON.parse(jsonStr);
           } catch {
-            // Ignore partial parse errors
+            continue; // genuinely malformed JSON, skip
+          }
+          if (data.type === "status") {
+            setLiveStatus(data.text ?? null);
+          } else if (data.type === "thinking") {
+            const newThought = data.text ?? "";
+            accumulatedThinking += (accumulatedThinking ? "\n\n" : "") + newThought;
+            setLiveThinking(accumulatedThinking);
+          } else if (data.type === "done") {
+            finalReply = data.reply ?? "";
+            if (data.conversationId && data.conversationId !== activeConversationId) {
+              setActiveConversationId(data.conversationId);
+            }
+            qc.invalidateQueries({ queryKey: ["ai-actions"] });
+            qc.invalidateQueries({ queryKey: ["conversations"] });
+            qc.invalidateQueries({ queryKey: ["goal-context"] });
+          } else if (data.type === "error") {
+            throw new Error(data.error ?? "Unknown Copilot error");
           }
         }
       }
 
       if (finalReply) {
-        setNewMessages((m) => [...m, { role: "assistant", content: finalReply }]);
+        setNewMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            content: finalReply,
+            thinkingContent: accumulatedThinking || undefined,
+          },
+        ]);
       }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Failed to communicate with Copilot";
@@ -366,6 +414,9 @@ export function ChatPanel() {
         {messages.map((m, i) => (
           <div key={i} className={`${styles.msg} ${m.role === "user" ? styles.user : styles.assistant}`}>
             {m.role === "assistant" && <div className={styles.role}>Copilot</div>}
+            {m.role === "assistant" && m.thinkingContent && (
+              <ThinkingAccordion content={m.thinkingContent} isLive={false} />
+            )}
             {m.role === "assistant" ? <MarkdownContent content={m.content} /> : m.content}
           </div>
         ))}
@@ -437,15 +488,9 @@ export function ChatPanel() {
         })}
 
         {isGenerating && (
-          <div className={styles.thinkingBox}>
-            <div className={styles.thinkingHeader} onClick={() => setShowThinking((v) => !v)}>
-              <div className={styles.thinkingTitle}>
-                <Sparkles size={13} className={styles.thinkingSpinner} />
-                <span>{liveStatus || "Thinking & Planning..."}</span>
-              </div>
-              {showThinking ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </div>
-            {showThinking && liveThinking && <div className={styles.thinkingContent}>{liveThinking}</div>}
+          <div className={styles.msg + " " + styles.assistant}>
+            <div className={styles.role}>Copilot</div>
+            <ThinkingAccordion content={liveThinking} status={liveStatus} isLive={true} />
           </div>
         )}
       </div>
