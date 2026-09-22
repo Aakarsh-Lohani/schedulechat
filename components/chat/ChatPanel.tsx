@@ -18,6 +18,7 @@ import {
   Wrench,
   AlertCircle,
   Clock,
+  History,
 } from "lucide-react";
 import { useUIStore } from "@/lib/store/uiStore";
 import { MarkdownContent } from "./MarkdownContent";
@@ -428,21 +429,49 @@ export function ChatPanel() {
     }
   }
 
-  // Special commands popover state
-  const [showCmdMenu, setShowCmdMenu] = useState(false);
-  const specialCmdRef = useRef<HTMLDivElement>(null);
+  // Docked accordion state for space-saving: "changes" | "commands" | null
+  const [dockedPanel, setDockedPanel] = useState<"changes" | "commands" | null>(null);
+
+  // Textarea auto-expansion up to 3 lines
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  function adjustTextareaHeight(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    const scrollHeight = el.scrollHeight;
+    const maxHeight = 68; // ~3 lines at 1.45 line-height
+    el.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+    el.style.overflowY = scrollHeight > maxHeight ? "auto" : "hidden";
+  }
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (specialCmdRef.current && !specialCmdRef.current.contains(e.target as Node)) {
-        setShowCmdMenu(false);
+    if (!input && textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.overflowY = "hidden";
+    }
+  }, [input]);
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter") {
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl+Enter or Cmd+Enter: insert newline
+        e.preventDefault();
+        const target = e.currentTarget;
+        const start = target.selectionStart;
+        const end = target.selectionEnd;
+        const val = target.value;
+        const nextVal = val.substring(0, start) + "\n" + val.substring(end);
+        setInput(nextVal);
+        setTimeout(() => {
+          target.selectionStart = target.selectionEnd = start + 1;
+          adjustTextareaHeight(target);
+        }, 0);
+      } else if (!e.shiftKey) {
+        // Plain Enter: send message
+        e.preventDefault();
+        handleSend();
       }
     }
-    if (showCmdMenu) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [showCmdMenu]);
+  }
 
   const { data: actions } = useAiActions();
   const approveAction = useApproveAction();
@@ -507,7 +536,13 @@ export function ChatPanel() {
   async function handleSend(customText?: string) {
     const text = (customText ?? input).trim();
     if (!text || isGenerating) return;
-    if (!customText) setInput("");
+    if (!customText) {
+      setInput("");
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+        textareaRef.current.style.overflowY = "hidden";
+      }
+    }
     setNewMessages((m) => [...m, { role: "user", content: text }]);
     setIsGenerating(true);
     setLiveStatus("Starting Copilot reasoning...");
@@ -971,26 +1006,90 @@ export function ChatPanel() {
         )}
       </div>
 
-      <div className={styles.undoList}>
-        <div className={styles.undoHeading}>Recent AI changes</div>
-        {recentHistory.length === 0 && <div className={styles.undoDesc}>No changes yet</div>}
-        {recentHistory.map((a) => (
-          <div key={a.id} className={styles.undoItem}>
-            <span className={styles.undoDesc}>{a.summary}</span>
+      {dockedPanel === "changes" && (
+        <div className={styles.dockedAccordion}>
+          <div className={styles.dockedHeader} onClick={() => setDockedPanel(null)}>
+            <div className={styles.dockedTitle}>
+              <History size={12} className={styles.dockedIcon} />
+              <span>Recent AI changes ({recentHistory.length})</span>
+            </div>
             <button
               type="button"
-              className={styles.undoBtn}
-              disabled={a.status === "undone" || undoAction.isPending}
-              onClick={() => undoAction.mutate(a.id)}
+              className={styles.dockedCloseBtn}
+              onClick={(e) => {
+                e.stopPropagation();
+                setDockedPanel(null);
+              }}
+              title="Close"
             >
-              {a.status === "undone" ? "Undone" : "Undo"}
+              <X size={12} />
             </button>
           </div>
-        ))}
-      </div>
+          <div className={styles.dockedBody}>
+            {recentHistory.length === 0 ? (
+              <div className={styles.undoDesc}>No changes yet</div>
+            ) : (
+              recentHistory.map((a) => (
+                <div key={a.id} className={styles.undoItem}>
+                  <span className={styles.undoDesc}>{a.summary}</span>
+                  <button
+                    type="button"
+                    className={styles.undoBtn}
+                    disabled={a.status === "undone" || undoAction.isPending}
+                    onClick={() => undoAction.mutate(a.id)}
+                  >
+                    {a.status === "undone" ? "Undone" : "Undo"}
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {dockedPanel === "commands" && (
+        <div className={styles.dockedAccordion}>
+          <div className={styles.dockedHeader} onClick={() => setDockedPanel(null)}>
+            <div className={styles.dockedTitle}>
+              <Zap size={12} className={styles.dockedIcon} />
+              <span>Special Commands</span>
+            </div>
+            <button
+              type="button"
+              className={styles.dockedCloseBtn}
+              onClick={(e) => {
+                e.stopPropagation();
+                setDockedPanel(null);
+              }}
+              title="Close"
+            >
+              <X size={12} />
+            </button>
+          </div>
+          <div className={styles.dockedBody}>
+            <button
+              type="button"
+              className={styles.specialCmdItem}
+              onClick={() => {
+                setDockedPanel(null);
+                handleTriggerSprint();
+              }}
+              disabled={isGenerating}
+            >
+              <div className={styles.cmdItemTitle}>
+                <CalendarClock size={13} color="#a78bfa" />
+                <span>Plan Next 7-Day Sprint</span>
+              </div>
+              <div className={styles.cmdItemDesc}>
+                Review Goals & study limits, check unfinished tasks, and plan next 7 days.
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className={styles.inputWrap}>
-        {/* Suggest / Update toggle, Special commands icon popover, and Model select */}
+        {/* Suggest / Update toggle, Special Commands button, Recent Changes button, and Model select */}
         <div className={styles.inputControlsRow}>
           <div className={styles.controlsLeft}>
             <div className={styles.modeToggle}>
@@ -1010,39 +1109,25 @@ export function ChatPanel() {
               </button>
             </div>
 
-            <div className={styles.specialCmdWrap} ref={specialCmdRef}>
-              <button
-                type="button"
-                className={`${styles.specialCmdBtn} ${showCmdMenu ? styles.active : ""}`}
-                onClick={() => setShowCmdMenu((v) => !v)}
-                title="Special commands"
-                aria-label="Special commands"
-              >
-                <Zap size={13} />
-              </button>
-              {showCmdMenu && (
-                <div className={styles.specialCmdMenu}>
-                  <div className={styles.specialCmdMenuHead}>Special Commands</div>
-                  <button
-                    type="button"
-                    className={styles.specialCmdItem}
-                    onClick={() => {
-                      setShowCmdMenu(false);
-                      handleTriggerSprint();
-                    }}
-                    disabled={isGenerating}
-                  >
-                    <div className={styles.cmdItemTitle}>
-                      <CalendarClock size={13} color="#a78bfa" />
-                      <span>Plan Next 7-Day Sprint</span>
-                    </div>
-                    <div className={styles.cmdItemDesc}>
-                      Review Goals & study limits, check unfinished tasks, and plan next 7 days.
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              type="button"
+              className={`${styles.controlToggleBtn} ${dockedPanel === "commands" ? styles.active : ""}`}
+              onClick={() => setDockedPanel((cur) => (cur === "commands" ? null : "commands"))}
+              title="Special commands"
+            >
+              <Zap size={12} />
+              <span>Commands</span>
+            </button>
+
+            <button
+              type="button"
+              className={`${styles.controlToggleBtn} ${dockedPanel === "changes" ? styles.active : ""}`}
+              onClick={() => setDockedPanel((cur) => (cur === "changes" ? null : "changes"))}
+              title="Recent AI changes"
+            >
+              <History size={12} />
+              <span>Changes{recentHistory.length > 0 ? ` (${recentHistory.length})` : ""}</span>
+            </button>
           </div>
 
           <select
@@ -1060,13 +1145,18 @@ export function ChatPanel() {
         </div>
 
         <div className={styles.inputRow}>
-          <input
+          <textarea
+            ref={textareaRef}
             className={styles.textInput}
-            placeholder="Ask Copilot or request changes…"
+            placeholder="Ask Copilot or request changes… (Enter to send, Ctrl+Enter for newline)"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            onChange={(e) => {
+              setInput(e.target.value);
+              adjustTextareaHeight(e.target);
+            }}
+            onKeyDown={handleKeyDown}
             disabled={isGenerating}
+            rows={1}
           />
           {isGenerating ? (
             <button
