@@ -16,6 +16,7 @@ import { formatClock, formatDuration } from "@/lib/timers/budget";
 import { COUNTDOWN_SECONDS } from "@/lib/timers/constants";
 import type { TimerSlotDTO } from "@/lib/api/types";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { AppLogo } from "@/components/ui/AppLogo";
 import styles from "./TimerBar.module.scss";
 
 function useNowTick(intervalMs = 1000) {
@@ -237,7 +238,10 @@ export function TimerBar() {
     <div className={styles.topbar}>
       <div className={styles.brandRow}>
         <div className={styles.brand}>
-          Schedule<span>Chat</span>
+          <AppLogo size={27} />
+          <span className={styles.brandText}>
+            Schedule<span>Chat</span>
+          </span>
         </div>
         <NotificationBell />
         <button
