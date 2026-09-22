@@ -1,0 +1,301 @@
+import { GoogleGenerativeAI, type Content, type FunctionDeclarationSchema, type FunctionDeclarationsTool, type Part } from "@google/generative-ai";
+import type Anthropic from "@anthropic-ai/sdk";
+import { getEnv } from "@/lib/env";
+import { getAnthropicClient, CHAT_MODEL } from "@/lib/ai/client";
+import { buildToolsForMode } from "@/lib/ai/tools";
+import { executeToolCall } from "@/lib/ai/providers/common";
+import type { ChatStepInput, ChatStepResult, TurnState } from "@/lib/ai/providers/types";
+
+const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+
+let geminiClient: GoogleGenerativeAI | null = null;
+function getGeminiClient(): GoogleGenerativeAI {
+  if (!geminiClient) geminiClient = new GoogleGenerativeAI(getEnv().GEMINI_API_KEY as string);
+  return geminiClient;
+}
+
+function toGeminiTools(mode: "suggest" | "update"): FunctionDeclarationsTool[] {
+  const tools = buildToolsForMode(mode);
+  return [
+    {
+      functionDeclarations: tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        parameters: t.input_schema as unknown as FunctionDeclarationSchema,
+      })),
+    },
+  ];
+}
+
+async function runGeminiStep(input: ChatStepInput): Promise<ChatStepResult> {
+  const { userId, mode, systemPrompt, history, message, model: requestedModel, turnState, onProgress } = input;
+  const modelName = requestedModel || DEFAULT_GEMINI_MODEL;
+
+  const model = getGeminiClient().getGenerativeModel({
+    model: modelName,
+    tools: toGeminiTools(mode),
+    systemInstruction: systemPrompt,
+    generationConfig: {
+      maxOutputTokens: 8192,
+      thinkingConfig: { includeThoughts: true },
+    } as unknown as import("@google/generative-ai").GenerationConfig,
+  });
+
+  // Reconstruct or resume Gemini contents
+  let contents: Content[];
+  if (turnState?.geminiContents && Array.isArray(turnState.geminiContents)) {
+    contents = [...(turnState.geminiContents as Content[])];
+  } else {
+    contents = history.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
+    if (message && message.trim()) {
+      contents.push({
+        role: "user",
+        parts: [{ text: message.trim() }],
+      });
+    }
+  }
+
+  const stepNumber = (turnState?.stepNumber || 0) + 1;
+  onProgress?.({
+    type: "status",
+    text: stepNumber === 1 ? "Analyzing request..." : "Evaluating plan and tool results...",
+  });
+
+  const result = await model.generateContent({ contents });
+  const candidate = result.response.candidates?.[0];
+  if (!candidate?.content) {
+    return {
+      isFinal: true,
+      replyText: "(no response generated)",
+      createdActionIds: turnState?.createdActionIds || [],
+    };
+  }
+
+  const thinkingSteps: string[] = [];
+  if (Array.isArray(candidate.content.parts)) {
+    for (const part of candidate.content.parts) {
+      const p = part as { thought?: boolean; text?: string };
+      if (p.thought && p.text) {
+        thinkingSteps.push(p.text);
+        onProgress?.({ type: "thinking", text: p.text });
+      }
+    }
+  }
+
+  contents.push(candidate.content);
+
+  const responseText = result.response.text?.() || "";
+  const calls = result.response.functionCalls();
+
+  // If intermediate text alongside calls, stream as thinking
+  if (responseText.trim() && calls && calls.length > 0) {
+    thinkingSteps.push(responseText);
+    onProgress?.({ type: "thinking", text: responseText });
+  }
+
+  // If no tool calls, this turn is final!
+  if (!calls || calls.length === 0) {
+    let finalProse = responseText;
+    const accumulatedActions = turnState?.createdActionIds || [];
+    if (!finalProse.trim() && accumulatedActions.length > 0) {
+      finalProse = `I have reviewed your Goals and scheduled your next sprint within your daily study limits (max 8 hours on weekdays, max 10 hours on weekends).\n\nPlease review the proposed changes above and click **Approve** to commit them to your board.`;
+    }
+    return {
+      isFinal: true,
+      replyText: finalProse || "(done)",
+      createdActionIds: accumulatedActions,
+      thinkingSteps,
+    };
+  }
+
+  // Execute tool calls for this single step
+  const createdActionIdsThisStep: string[] = [];
+  const responseParts: Part[] = [];
+
+  for (const call of calls) {
+    onProgress?.({ type: "status", text: `Executing: ${call.name}...` });
+    onProgress?.({
+      type: "tool_call",
+      text: `Executing ${call.name}`,
+      toolName: call.name,
+      toolArgs: call.args as Record<string, unknown>,
+    });
+
+    const toolResult = await executeToolCall(userId, mode, call.name, call.args);
+    if (toolResult.createdActionId) createdActionIdsThisStep.push(toolResult.createdActionId);
+
+    const resultSnippet = toolResult.resultText.length > 300
+      ? toolResult.resultText.slice(0, 300) + "…"
+      : toolResult.resultText;
+
+    onProgress?.({
+      type: "tool_result",
+      text: resultSnippet,
+      toolName: call.name,
+      isError: toolResult.isError,
+    });
+
+    responseParts.push({
+      functionResponse: {
+        name: call.name,
+        response: { result: toolResult.resultText, isError: toolResult.isError },
+      },
+    });
+  }
+
+  contents.push({
+    role: "user",
+    parts: responseParts,
+  });
+
+  const nextTurnState: TurnState = {
+    provider: "gemini",
+    stepNumber,
+    geminiContents: contents,
+    createdActionIds: [...(turnState?.createdActionIds || []), ...createdActionIdsThisStep],
+    accumulatedThinking: [...(turnState?.accumulatedThinking || []), ...thinkingSteps],
+  };
+
+  return {
+    isFinal: false,
+    createdActionIds: createdActionIdsThisStep,
+    thinkingSteps,
+    nextTurnState,
+  };
+}
+
+async function runAnthropicStep(input: ChatStepInput): Promise<ChatStepResult> {
+  const { userId, mode, systemPrompt, history, message, turnState, onProgress } = input;
+  const anthropic = getAnthropicClient();
+  const tools = buildToolsForMode(mode);
+
+  let messages: Anthropic.MessageParam[];
+  if (turnState?.anthropicMessages && Array.isArray(turnState.anthropicMessages)) {
+    messages = [...(turnState.anthropicMessages as Anthropic.MessageParam[])];
+  } else {
+    messages = history.map((m) => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: m.content,
+    }));
+    if (message && message.trim()) {
+      messages.push({
+        role: "user",
+        content: message.trim(),
+      });
+    }
+  }
+
+  const stepNumber = (turnState?.stepNumber || 0) + 1;
+  onProgress?.({
+    type: "status",
+    text: stepNumber === 1 ? "Analyzing request..." : "Evaluating plan and tool results...",
+  });
+
+  const response = await anthropic.messages.create({
+    model: CHAT_MODEL,
+    max_tokens: 16384,
+    system: systemPrompt,
+    tools,
+    messages,
+    thinking: { type: "enabled", budget_tokens: 4096 },
+  } as unknown as Anthropic.MessageCreateParamsNonStreaming);
+
+  const thinkingSteps: string[] = [];
+  for (const block of response.content) {
+    if ((block as { type: string }).type === "thinking") {
+      const thinkingText = (block as unknown as { thinking?: string }).thinking;
+      if (thinkingText) {
+        thinkingSteps.push(thinkingText);
+        onProgress?.({ type: "thinking", text: thinkingText });
+      }
+    }
+  }
+
+  const textBlocks = response.content.filter((b): b is Anthropic.TextBlock => b.type === "text");
+  const turnText = textBlocks.map((b) => b.text).join("\n");
+
+  const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+
+  if (toolUseBlocks.length === 0 || response.stop_reason !== "tool_use") {
+    let finalProse = turnText;
+    const accumulatedActions = turnState?.createdActionIds || [];
+    if (!finalProse.trim() && accumulatedActions.length > 0) {
+      finalProse = `I have reviewed your Goals and scheduled your next sprint within your daily study limits (max 8 hours on weekdays, max 10 hours on weekends).\n\nPlease review the proposed changes above and click **Approve** to commit them to your board.`;
+    }
+    return {
+      isFinal: true,
+      replyText: finalProse || "(done)",
+      createdActionIds: accumulatedActions,
+      thinkingSteps,
+    };
+  }
+
+  if (turnText && turnText.trim()) {
+    onProgress?.({ type: "thinking", text: turnText });
+  }
+
+  messages.push({ role: "assistant", content: response.content });
+
+  const createdActionIdsThisStep: string[] = [];
+  const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+  for (const block of toolUseBlocks) {
+    onProgress?.({ type: "status", text: `Executing: ${block.name}...` });
+    onProgress?.({
+      type: "tool_call",
+      text: `Executing ${block.name}`,
+      toolName: block.name,
+      toolArgs: block.input as Record<string, unknown>,
+    });
+
+    const result = await executeToolCall(userId, mode, block.name, block.input);
+    if (result.createdActionId) createdActionIdsThisStep.push(result.createdActionId);
+
+    const resultSnippet = result.resultText.length > 300
+      ? result.resultText.slice(0, 300) + "…"
+      : result.resultText;
+
+    onProgress?.({
+      type: "tool_result",
+      text: resultSnippet,
+      toolName: block.name,
+      isError: result.isError,
+    });
+
+    toolResults.push({
+      type: "tool_result",
+      tool_use_id: block.id,
+      content: result.resultText,
+      is_error: result.isError,
+    });
+  }
+
+  messages.push({ role: "user", content: toolResults });
+
+  const nextTurnState: TurnState = {
+    provider: "anthropic",
+    stepNumber,
+    anthropicMessages: messages,
+    createdActionIds: [...(turnState?.createdActionIds || []), ...createdActionIdsThisStep],
+    accumulatedThinking: [...(turnState?.accumulatedThinking || []), ...thinkingSteps],
+  };
+
+  return {
+    isFinal: false,
+    createdActionIds: createdActionIdsThisStep,
+    thinkingSteps,
+    nextTurnState,
+  };
+}
+
+export async function runChatStep(input: ChatStepInput): Promise<ChatStepResult> {
+  const { AI_PROVIDER } = getEnv();
+  const provider = input.turnState?.provider || AI_PROVIDER;
+  if (provider === "gemini") {
+    return runGeminiStep(input);
+  }
+  return runAnthropicStep(input);
+}

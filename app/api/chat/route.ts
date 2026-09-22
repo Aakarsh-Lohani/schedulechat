@@ -4,7 +4,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { chatRequestSchema } from "@/lib/validation/schemas";
 import { buildSystemPrompt } from "@/lib/ai/systemPrompt";
 import { buildContextSnapshot } from "@/lib/ai/context";
-import { runChatTurn } from "@/lib/ai";
+import { runChatTurn, runChatStep, type TurnState } from "@/lib/ai";
 import { ChatMessage } from "@/lib/db/models/ChatMessage";
 import { Conversation } from "@/lib/db/models/Conversation";
 import { AIAction } from "@/lib/db/models/AIAction";
@@ -12,7 +12,7 @@ import { checkRateLimit } from "@/lib/rateLimit";
 import { logger } from "@/lib/logger";
 
 const HISTORY_LIMIT = 12;
-export const maxDuration = 300;
+export const maxDuration = 55;
 
 export async function POST(req: Request) {
   const userId = await getCurrentUserId();
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request", code: "VALIDATION_ERROR" }, { status: 400 });
   }
-  const { message, mode, model, conversationId: requestedConvoId, stream: isStreaming } = parsed.data;
+  const { message, mode, model, conversationId: requestedConvoId, stream: isStreaming, turnState: incomingTurnState } = parsed.data;
 
   // Strict Suggest Mode isolation: if MONGODB_READONLY_URI is not configured, do not fall back to main env!
   if (mode === "suggest" && !process.env.MONGODB_READONLY_URI) {
@@ -46,26 +46,29 @@ export async function POST(req: Request) {
 
   // Find or create conversation
   let convo = requestedConvoId ? await Conversation.findOne({ _id: requestedConvoId, userId }) : null;
-  const initialTitle = message.trim().slice(0, 40) || "New Chat";
+  const initialTitle = message ? message.trim().slice(0, 40) || "New Chat" : "New Chat";
   if (!convo) {
     convo = await Conversation.create({
       userId,
       title: initialTitle,
     });
-  } else if (convo.title === "New Chat") {
+  } else if (convo.title === "New Chat" && message) {
     convo.title = initialTitle;
     await convo.save();
   }
 
   const activeConvoId = convo._id;
 
-  await ChatMessage.create({
-    userId,
-    conversationId: activeConvoId,
-    role: "user",
-    content: message,
-    mode,
-  });
+  // Only create user ChatMessage on the very first step of a turn
+  if (!incomingTurnState && message && message.trim()) {
+    await ChatMessage.create({
+      userId,
+      conversationId: activeConvoId,
+      role: "user",
+      content: message.trim(),
+      mode,
+    });
+  }
 
   const historyDocs = await ChatMessage.find({ userId, conversationId: activeConvoId })
     .sort({ createdAt: -1 })
@@ -77,8 +80,8 @@ export async function POST(req: Request) {
   const systemPrompt = `${buildSystemPrompt(mode)}\n\n${contextSnapshot}`;
 
   logger.info(
-    { userId, mode, model, conversationId: String(activeConvoId), provider: process.env.AI_PROVIDER ?? "anthropic" },
-    "chat turn started"
+    { userId, mode, model, conversationId: String(activeConvoId), provider: process.env.AI_PROVIDER ?? "anthropic", isStep: Boolean(incomingTurnState) },
+    "chat step started"
   );
 
   // Streaming response mode
@@ -95,7 +98,7 @@ export async function POST(req: Request) {
         }
 
         try {
-          const result = await runChatTurn({
+          const result = await runChatStep({
             userId,
             mode,
             systemPrompt,
@@ -103,7 +106,9 @@ export async function POST(req: Request) {
               role: m.role === "assistant" ? "assistant" : "user",
               content: m.content,
             })),
+            message: incomingTurnState ? undefined : message,
             model,
+            turnState: incomingTurnState as unknown as TurnState,
             onProgress: (event) => {
               emit({
                 type: event.type,
@@ -115,34 +120,55 @@ export async function POST(req: Request) {
             },
           });
 
-          const assistantMessage = await ChatMessage.create({
-            userId,
-            conversationId: activeConvoId,
-            role: "assistant",
-            content: result.replyText,
-            mode,
-            relatedActionIds: result.createdActionIds,
-          });
+          if (result.isFinal) {
+            const assistantMessage = await ChatMessage.create({
+              userId,
+              conversationId: activeConvoId,
+              role: "assistant",
+              content: result.replyText || "(done)",
+              mode,
+              relatedActionIds: result.createdActionIds,
+            });
 
-          await Conversation.updateOne({ _id: activeConvoId }, { $set: { updatedAt: new Date() } });
+            await Conversation.updateOne({ _id: activeConvoId }, { $set: { updatedAt: new Date() } });
 
-          const proposals = result.createdActionIds.length
-            ? await AIAction.find({ _id: { $in: result.createdActionIds } }).lean()
-            : [];
+            const proposals = result.createdActionIds.length
+              ? await AIAction.find({ _id: { $in: result.createdActionIds } }).lean()
+              : [];
 
-          emit({
-            type: "done",
-            reply: assistantMessage.content,
-            conversationId: String(convo._id),
-            conversationTitle: convo.title,
-            thinkingSteps: result.thinkingSteps ?? [],
-            proposals: proposals.map((p) => ({
-              id: String(p._id),
-              type: p.type,
-              summary: p.summary,
-              status: p.status,
-            })),
-          });
+            emit({
+              type: "done",
+              isFinal: true,
+              reply: assistantMessage.content,
+              conversationId: String(convo._id),
+              conversationTitle: convo.title,
+              thinkingSteps: result.thinkingSteps ?? [],
+              proposals: proposals.map((p) => ({
+                id: String(p._id),
+                type: p.type,
+                summary: p.summary,
+                status: p.status,
+              })),
+            });
+          } else {
+            const proposals = result.createdActionIds.length
+              ? await AIAction.find({ _id: { $in: result.createdActionIds } }).lean()
+              : [];
+
+            emit({
+              type: "step_done",
+              isFinal: false,
+              nextTurnState: result.nextTurnState,
+              conversationId: String(convo._id),
+              thinkingSteps: result.thinkingSteps ?? [],
+              proposals: proposals.map((p) => ({
+                id: String(p._id),
+                type: p.type,
+                summary: p.summary,
+                status: p.status,
+              })),
+            });
+          }
         } catch (err: unknown) {
           if (req.signal.aborted) {
             logger.info({ userId }, "chat stream aborted by client");

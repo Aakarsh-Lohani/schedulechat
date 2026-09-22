@@ -56,9 +56,10 @@ export const extendTimerSchema = z.object({
 });
 
 export const chatRequestSchema = z.object({
-  message: z.string().min(1).max(4000),
+  message: z.string().max(4000).optional().default(""),
   mode: z.enum(["suggest", "update"]),
   model: z.string().optional(),
   conversationId: objectIdString.optional(),
   stream: z.boolean().optional(),
+  turnState: z.record(z.string(), z.unknown()).optional(),
 });

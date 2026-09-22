@@ -303,122 +303,211 @@ export function ChatPanel() {
     abortControllerRef.current = controller;
 
     const accumulatedSteps: TraceStep[] = [];
-    let buffer = "";
     let finalReply = "";
     let accumulatedThinking = "";
+    let currentTurnState: Record<string, unknown> | null = null;
+    let currentConversationId: string | null = activeConversationId;
+    let isFinal = false;
+    let stepCount = 0;
+    const MAX_STEPS = 30;
 
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          message: text,
-          mode: chatMode,
-          model: selectedModel,
-          conversationId: activeConversationId,
-          stream: true,
-        }),
-      });
+      while (!isFinal && !controller.signal.aborted && stepCount < MAX_STEPS) {
+        stepCount++;
+        let stepSucceeded = false;
+        let lastStepError: Error | null = null;
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
+        // Resilient retry loop: up to 3 attempts per atomic step
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          if (controller.signal.aborted) break;
 
-      if (!response.body) {
-        throw new Error("No response stream available");
-      }
+          if (attempt > 1) {
+            setLiveStatus(`Server took longer to respond. Retrying... (Attempt ${attempt} of 3)`);
+            const waitTime = attempt === 2 ? 1500 : 3000;
+            await new Promise((resolve) => {
+              const timer = setTimeout(resolve, waitTime);
+              controller.signal.addEventListener(
+                "abort",
+                () => {
+                  clearTimeout(timer);
+                  resolve(null);
+                },
+                { once: true }
+              );
+            });
+            if (controller.signal.aborted) break;
+          }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
+          // Per-step safety controller linked to main abort controller
+          const stepAbortController = new AbortController();
+          const onMainAbort = () => stepAbortController.abort();
+          controller.signal.addEventListener("abort", onMainAbort, { once: true });
+          const stepTimer = setTimeout(() => {
+            stepAbortController.abort();
+          }, 50000); // 50s per step safety timeout (within 55s route duration)
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        // Split on double newlines (SSE spec), handle both \n\n and \r\n\r\n
-        const chunks = buffer.split(/\r?\n\r?\n/);
-        buffer = chunks.pop() ?? "";
-
-        for (const chunk of chunks) {
-          const dataLine = chunk.split(/\r?\n/).find((l) => l.startsWith("data:"));
-          if (!dataLine) continue;
-          const jsonStr = dataLine.slice(dataLine.indexOf(":") + 1).trim();
-          if (!jsonStr) continue;
-          let data: {
-            type: string;
-            text?: string;
-            reply?: string;
-            error?: string;
-            toolName?: string;
-            toolArgs?: Record<string, unknown>;
-            isError?: boolean;
-            conversationId?: string;
-            conversationTitle?: string;
-          };
+          let buffer = "";
           try {
-            data = JSON.parse(jsonStr);
-          } catch {
-            continue;
-          }
+            const requestBody: Record<string, unknown> = {
+              mode: chatMode,
+              model: selectedModel,
+              conversationId: currentConversationId,
+              stream: true,
+            };
 
-          if (data.type === "status") {
-            setLiveStatus(data.text ?? null);
-            accumulatedSteps.push({
-              id: "status-" + Date.now() + Math.random(),
-              kind: "status",
-              title: data.text ?? "Status update",
-              status: "done",
-              timestamp: Date.now(),
-            });
-            setLiveTraceSteps([...accumulatedSteps]);
-          } else if (data.type === "thinking") {
-            const newThought = data.text ?? "";
-            accumulatedThinking += (accumulatedThinking ? "\n\n" : "") + newThought;
-            setLiveThinking(accumulatedThinking);
-            accumulatedSteps.push({
-              id: "thought-" + Date.now() + Math.random(),
-              kind: "thought",
-              title: "Reasoning",
-              detail: newThought,
-              status: "done",
-              timestamp: Date.now(),
-            });
-            setLiveTraceSteps([...accumulatedSteps]);
-          } else if (data.type === "tool_call") {
-            setLiveStatus(`Executing: ${data.toolName ?? "tool"}...`);
-            accumulatedSteps.push({
-              id: "tool-" + (data.toolName ?? "call") + "-" + Date.now(),
-              kind: "tool",
-              title: data.toolName ?? "Tool Call",
-              toolName: data.toolName,
-              toolArgs: data.toolArgs,
-              status: "running",
-              timestamp: Date.now(),
-            });
-            setLiveTraceSteps([...accumulatedSteps]);
-          } else if (data.type === "tool_result") {
-            const matchingTool = [...accumulatedSteps].reverse().find((s) => s.kind === "tool" && s.toolName === data.toolName);
-            if (matchingTool) {
-              matchingTool.status = data.isError ? "error" : "done";
-              matchingTool.toolResult = data.text;
-              matchingTool.isError = data.isError;
+            if (stepCount === 1 && !currentTurnState) {
+              requestBody.message = text;
+            } else {
+              requestBody.message = "";
+              requestBody.turnState = currentTurnState;
             }
-            setLiveTraceSteps([...accumulatedSteps]);
-          } else if (data.type === "done") {
-            finalReply = data.reply ?? "";
-            if (data.conversationId && data.conversationId !== activeConversationId) {
-              setActiveConversationId(data.conversationId);
+
+            const response = await fetch("/api/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: stepAbortController.signal,
+              body: JSON.stringify(requestBody),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(errorData.error || `HTTP ${response.status}`);
             }
-            qc.invalidateQueries({ queryKey: ["ai-actions"] });
-            qc.invalidateQueries({ queryKey: ["conversations"] });
-            qc.invalidateQueries({ queryKey: ["goal-context"] });
-          } else if (data.type === "stopped") {
-            // Stream was stopped by user
-          } else if (data.type === "error") {
-            throw new Error(data.error ?? "Unknown Copilot error");
+
+            if (!response.body) {
+              throw new Error("No response stream available");
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const chunks = buffer.split(/\r?\n\r?\n/);
+              buffer = chunks.pop() ?? "";
+
+              for (const chunk of chunks) {
+                const dataLine = chunk.split(/\r?\n/).find((l) => l.startsWith("data:"));
+                if (!dataLine) continue;
+                const jsonStr = dataLine.slice(dataLine.indexOf(":") + 1).trim();
+                if (!jsonStr) continue;
+                let data: {
+                  type: string;
+                  text?: string;
+                  reply?: string;
+                  error?: string;
+                  toolName?: string;
+                  toolArgs?: Record<string, unknown>;
+                  isError?: boolean;
+                  conversationId?: string;
+                  conversationTitle?: string;
+                  isFinal?: boolean;
+                  nextTurnState?: Record<string, unknown>;
+                };
+                try {
+                  data = JSON.parse(jsonStr);
+                } catch {
+                  continue;
+                }
+
+                if (data.type === "status") {
+                  setLiveStatus(data.text ?? null);
+                  accumulatedSteps.push({
+                    id: "status-" + Date.now() + Math.random(),
+                    kind: "status",
+                    title: data.text ?? "Status update",
+                    status: "done",
+                    timestamp: Date.now(),
+                  });
+                  setLiveTraceSteps([...accumulatedSteps]);
+                } else if (data.type === "thinking") {
+                  const newThought = data.text ?? "";
+                  accumulatedThinking += (accumulatedThinking ? "\n\n" : "") + newThought;
+                  setLiveThinking(accumulatedThinking);
+                  accumulatedSteps.push({
+                    id: "thought-" + Date.now() + Math.random(),
+                    kind: "thought",
+                    title: "Reasoning",
+                    detail: newThought,
+                    status: "done",
+                    timestamp: Date.now(),
+                  });
+                  setLiveTraceSteps([...accumulatedSteps]);
+                } else if (data.type === "tool_call") {
+                  setLiveStatus(`Executing: ${data.toolName ?? "tool"}...`);
+                  accumulatedSteps.push({
+                    id: "tool-" + (data.toolName ?? "call") + "-" + Date.now(),
+                    kind: "tool",
+                    title: data.toolName ?? "Tool Call",
+                    toolName: data.toolName,
+                    toolArgs: data.toolArgs,
+                    status: "running",
+                    timestamp: Date.now(),
+                  });
+                  setLiveTraceSteps([...accumulatedSteps]);
+                } else if (data.type === "tool_result") {
+                  const matchingTool = [...accumulatedSteps].reverse().find((s) => s.kind === "tool" && s.toolName === data.toolName);
+                  if (matchingTool) {
+                    matchingTool.status = data.isError ? "error" : "done";
+                    matchingTool.toolResult = data.text;
+                    matchingTool.isError = data.isError;
+                  }
+                  setLiveTraceSteps([...accumulatedSteps]);
+                } else if (data.type === "step_done") {
+                  currentTurnState = data.nextTurnState ?? null;
+                  if (data.conversationId) {
+                    currentConversationId = data.conversationId;
+                    if (data.conversationId !== activeConversationId) {
+                      setActiveConversationId(data.conversationId);
+                    }
+                  }
+                  qc.invalidateQueries({ queryKey: ["ai-actions"] });
+                  stepSucceeded = true;
+                } else if (data.type === "done") {
+                  isFinal = true;
+                  finalReply = data.reply ?? "";
+                  if (data.conversationId) {
+                    currentConversationId = data.conversationId;
+                    if (data.conversationId !== activeConversationId) {
+                      setActiveConversationId(data.conversationId);
+                    }
+                  }
+                  qc.invalidateQueries({ queryKey: ["ai-actions"] });
+                  qc.invalidateQueries({ queryKey: ["conversations"] });
+                  qc.invalidateQueries({ queryKey: ["goal-context"] });
+                  stepSucceeded = true;
+                } else if (data.type === "stopped") {
+                  isFinal = true;
+                  stepSucceeded = true;
+                } else if (data.type === "error") {
+                  throw new Error(data.error ?? "Unknown Copilot error");
+                }
+              }
+            }
+
+            if (stepSucceeded) {
+              break; // Step finished successfully, break retry loop to continue outer step loop
+            }
+          } catch (stepErr: unknown) {
+            const isUserAborted = controller.signal.aborted;
+            if (isUserAborted) {
+              throw stepErr; // Explicit user stop, escape immediately
+            }
+            lastStepError = stepErr instanceof Error ? stepErr : new Error(String(stepErr));
+            if (attempt === 3) {
+              throw lastStepError;
+            }
+          } finally {
+            clearTimeout(stepTimer);
+            controller.signal.removeEventListener("abort", onMainAbort);
           }
+        }
+
+        if (!stepSucceeded && !controller.signal.aborted) {
+          if (lastStepError) throw lastStepError;
+          break;
         }
       }
 

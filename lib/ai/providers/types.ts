@@ -39,3 +39,31 @@ export interface ChatTurnResult {
   createdActionIds: string[];
   thinkingSteps?: string[];
 }
+
+export interface TurnState {
+  provider: "gemini" | "anthropic";
+  stepNumber: number;
+  geminiContents?: unknown[];
+  anthropicMessages?: unknown[];
+  createdActionIds: string[];
+  accumulatedThinking: string[];
+}
+
+export interface ChatStepInput {
+  userId: string;
+  mode: "suggest" | "update";
+  systemPrompt: string;
+  history: ChatTurnMessage[];
+  message?: string;
+  model?: string;
+  turnState?: TurnState;
+  onProgress?: (event: ChatProgressEvent) => void;
+}
+
+export interface ChatStepResult {
+  isFinal: boolean;
+  replyText?: string;
+  createdActionIds: string[];
+  thinkingSteps?: string[];
+  nextTurnState?: TurnState;
+}
