@@ -48,6 +48,7 @@ export interface TurnState {
   anthropicMessages?: unknown[];
   createdActionIds: string[];
   accumulatedThinking: string[];
+  thoughtSignatures?: Record<string, string>;
 }
 
 export interface ChatStepInput {

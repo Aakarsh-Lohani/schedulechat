@@ -53,11 +53,16 @@ async function generateStreamWithRetry(
     try {
       const streamResult = await model.generateContentStream(request);
       const thinkingSteps: string[] = [];
+      const rawPartsWithSignatures: any[] = [];
 
       // Forward chunks as they arrive — keeps SSE alive
       for await (const chunk of streamResult.stream) {
         const parts = chunk.candidates?.[0]?.content?.parts ?? [];
         for (const part of parts) {
+          const rawP = part as any;
+          if (rawP.thought_signature || rawP.thoughtSignature || rawP.functionCall) {
+            rawPartsWithSignatures.push(rawP);
+          }
           const p = part as { thought?: boolean; text?: string };
           if (p.thought && p.text) {
             thinkingSteps.push(p.text);
@@ -67,6 +72,26 @@ async function generateStreamWithRetry(
       }
 
       const response = await streamResult.response;
+
+      // Restore thought_signature stripped by legacy SDK's aggregateResponses
+      const candidate = response.candidates?.[0];
+      if (candidate?.content && Array.isArray(candidate.content.parts)) {
+        for (const p of candidate.content.parts as any[]) {
+          if (p.functionCall && !p.thought_signature && !p.thoughtSignature) {
+            const match =
+              rawPartsWithSignatures.find(
+                (r) => r.functionCall?.name === p.functionCall.name && (r.thought_signature || r.thoughtSignature)
+              ) || rawPartsWithSignatures.find((r) => r.thought_signature || r.thoughtSignature);
+
+            const sig = match?.thought_signature || match?.thoughtSignature;
+            if (sig) {
+              p.thought_signature = sig;
+              p.thoughtSignature = sig;
+            }
+          }
+        }
+      }
+
       return { response, thinkingSteps };
     } catch (err: unknown) {
       attempt++;
@@ -132,7 +157,7 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
     } catch (firstErr: unknown) {
       // If thinkingConfig was rejected, retry without it once
       const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
-      if (thinkingEnabled && (errMsg.includes("thinkingConfig") || errMsg.includes("Invalid argument"))) {
+      if (thinkingEnabled && (errMsg.includes("thinkingConfig") || errMsg.includes("Invalid argument") || errMsg.includes("thought_signature"))) {
         thinkingEnabled = false;
         model = getClient().getGenerativeModel({
           model: modelName,
