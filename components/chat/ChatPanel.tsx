@@ -685,9 +685,13 @@ export function ChatPanel() {
           const stepAbortController = new AbortController();
           const onMainAbort = () => stepAbortController.abort();
           controller.signal.addEventListener("abort", onMainAbort, { once: true });
-          const stepTimer = setTimeout(() => {
-            stepAbortController.abort();
-          }, 50000); // 50s per step safety timeout (within 55s route duration)
+          // Local models run on local GPU and are exempt from cloud serverless timeouts (unlimited time)
+          const isLocal = selectedModel?.startsWith("local/");
+          const stepTimer = isLocal
+            ? null
+            : setTimeout(() => {
+                stepAbortController.abort();
+              }, 50000); // 50s per step safety timeout for cloud serverless (within 55s route duration)
 
           let buffer = "";
           try {
@@ -768,16 +772,21 @@ export function ChatPanel() {
                   setLiveTraceSteps([...accumulatedSteps]);
                 } else if (data.type === "thinking") {
                   const newThought = data.text ?? "";
-                  accumulatedThinking += (accumulatedThinking ? "\n\n" : "") + newThought;
+                  accumulatedThinking += newThought;
                   setLiveThinking(accumulatedThinking);
-                  accumulatedSteps.push({
-                    id: "thought-" + Date.now() + Math.random(),
-                    kind: "thought",
-                    title: "Reasoning",
-                    detail: newThought,
-                    status: "done",
-                    timestamp: Date.now(),
-                  });
+                  const lastStep = accumulatedSteps[accumulatedSteps.length - 1];
+                  if (lastStep && lastStep.kind === "thought") {
+                    lastStep.detail = (lastStep.detail || "") + newThought;
+                  } else {
+                    accumulatedSteps.push({
+                      id: "thought-" + Date.now() + Math.random(),
+                      kind: "thought",
+                      title: "Reasoning",
+                      detail: newThought,
+                      status: "done",
+                      timestamp: Date.now(),
+                    });
+                  }
                   setLiveTraceSteps([...accumulatedSteps]);
                 } else if (data.type === "tool_call") {
                   setLiveStatus(`Executing: ${data.toolName ?? "tool"}...`);
@@ -858,7 +867,7 @@ export function ChatPanel() {
               throw lastStepError;
             }
           } finally {
-            clearTimeout(stepTimer);
+            if (stepTimer) clearTimeout(stepTimer);
             controller.signal.removeEventListener("abort", onMainAbort);
           }
         }

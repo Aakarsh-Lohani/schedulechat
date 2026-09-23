@@ -117,6 +117,7 @@ export async function POST(req: Request) {
               model,
               engineVersion,
               turnState: incomingTurnState as unknown as TurnState,
+              signal: req.signal,
               onProgress: (event) => {
                 emit({
                   type: event.type,

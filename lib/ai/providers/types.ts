@@ -63,6 +63,7 @@ export interface ChatStepInput {
   engineVersion?: "v1" | "v2";
   turnState?: TurnState;
   onProgress?: (event: ChatProgressEvent) => void;
+  signal?: AbortSignal;
 }
 
 export interface ChatStepResult {
