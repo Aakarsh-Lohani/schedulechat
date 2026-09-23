@@ -16,7 +16,7 @@ interface MarkdownContentProps {
  */
 function renderInlineText(text: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
-  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\))/g;
+  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\))/g;
   let lastIdx = 0;
   let match: RegExpExecArray | null;
 
@@ -34,6 +34,21 @@ function renderInlineText(text: string): React.ReactNode[] {
       (token.startsWith("_") && token.endsWith("_"))
     ) {
       parts.push(<em key={match.index}>{token.slice(1, -1)}</em>);
+    } else if (token.startsWith("![") && token.includes("](")) {
+      const imgMatch = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(token);
+      if (imgMatch && imgMatch[2]) {
+        parts.push(
+          <img
+            key={match.index}
+            src={imgMatch[2]}
+            alt={imgMatch[1] || "Generated image"}
+            className={styles.markdownImage}
+            loading="lazy"
+          />
+        );
+      } else {
+        parts.push(token);
+      }
     } else if (token.startsWith("[") && token.includes("](")) {
       const linkMatch = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token);
       if (linkMatch && linkMatch[1] && linkMatch[2]) {

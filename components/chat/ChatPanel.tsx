@@ -19,6 +19,9 @@ import {
   AlertCircle,
   Clock,
   History,
+  Pin,
+  PinOff,
+  Search,
 } from "lucide-react";
 import { useUIStore } from "@/lib/store/uiStore";
 import { MarkdownContent } from "./MarkdownContent";
@@ -434,6 +437,48 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
   const [isResizing, setIsResizing] = useState(false);
+
+  // Pinned models management with localStorage persistence
+  const DEFAULT_PINNED_MODELS = useMemo(() => ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"], []);
+  const [pinnedModels, setPinnedModels] = useState<string[]>(DEFAULT_PINNED_MODELS);
+  const [isModelModalOpen, setIsModelModalOpen] = useState(false);
+  const [modelSearchQuery, setModelSearchQuery] = useState("");
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("schedulechat_pinned_models");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPinnedModels(parsed.slice(0, 3));
+        }
+      }
+    } catch {
+      // fallback to default
+    }
+  }, []);
+
+  function togglePinModel(modelId: string) {
+    setPinnedModels((prev) => {
+      let updated: string[];
+      if (prev.includes(modelId)) {
+        updated = prev.filter((id) => id !== modelId);
+      } else {
+        // Keep up to 3 pinned models: replace the last one if full
+        if (prev.length >= 3) {
+          updated = [prev[0]!, prev[1]!, modelId];
+        } else {
+          updated = [...prev, modelId];
+        }
+      }
+      try {
+        localStorage.setItem("schedulechat_pinned_models", JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+  }
 
   // Live thinking & streaming progress state
   const [isGenerating, setIsGenerating] = useState(false);
@@ -1167,17 +1212,38 @@ export function ChatPanel() {
             </button>
           </div>
 
+          {/* Model selector dropdown (pinned models + More models option) */}
           <select
             className={styles.modelSelect}
             value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value === "MORE_MODELS") {
+                setIsModelModalOpen(true);
+              } else {
+                setSelectedModel(e.target.value);
+              }
+            }}
             title="Select Gemini Model"
           >
-            {(availableModels ?? []).map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
+            {/* 3 Pinned Models */}
+            {pinnedModels.map((pId) => {
+              const modelObj = (availableModels ?? []).find((m) => m.id === pId);
+              return (
+                <option key={pId} value={pId}>
+                  {modelObj ? modelObj.label : pId} [Pinned]
+                </option>
+              );
+            })}
+
+            {/* If currently selected model is not in the pinned list, display it in dropdown */}
+            {!pinnedModels.includes(selectedModel) && (
+              <option value={selectedModel}>
+                {(availableModels ?? []).find((m) => m.id === selectedModel)?.label || selectedModel} [Active]
               </option>
-            ))}
+            )}
+
+            {/* 4th row: opens the full models modal */}
+            <option value="MORE_MODELS">More models…</option>
           </select>
         </div>
 
@@ -1217,6 +1283,104 @@ export function ChatPanel() {
           )}
         </div>
       </div>
+
+      {/* More Models Modal Dialog */}
+      {isModelModalOpen && (
+        <div className={styles.modelModalOverlay} onClick={() => setIsModelModalOpen(false)}>
+          <div className={styles.modelModal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modelModalHeader}>
+              <div className={styles.modelModalTitle}>
+                <Sparkles size={14} className={styles.modelModalSparkle} />
+                <span>Select & Pin Models</span>
+              </div>
+              <button
+                type="button"
+                className={styles.modelModalCloseBtn}
+                onClick={() => setIsModelModalOpen(false)}
+                title="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className={styles.modelModalSearchRow}>
+              <Search size={13} className={styles.modelModalSearchIcon} />
+              <input
+                type="text"
+                className={styles.modelModalSearchInput}
+                placeholder="Search models (e.g. flash, pro, image, 3.8)..."
+                value={modelSearchQuery}
+                onChange={(e) => setModelSearchQuery(e.target.value)}
+                autoFocus
+              />
+              {modelSearchQuery && (
+                <button
+                  type="button"
+                  className={styles.modelModalClearBtn}
+                  onClick={() => setModelSearchQuery("")}
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+
+            <div className={styles.modelModalList}>
+              {(availableModels ?? [])
+                .filter((m) => {
+                  if (!modelSearchQuery.trim()) return true;
+                  const q = modelSearchQuery.toLowerCase();
+                  return m.id.toLowerCase().includes(q) || m.label.toLowerCase().includes(q);
+                })
+                .map((m) => {
+                  const isPinned = pinnedModels.includes(m.id);
+                  const isSelected = selectedModel === m.id;
+
+                  return (
+                    <div
+                      key={m.id}
+                      className={`${styles.modelModalItem} ${isSelected ? styles.selected : ""}`}
+                      onClick={() => {
+                        setSelectedModel(m.id);
+                        setIsModelModalOpen(false);
+                      }}
+                    >
+                      <div className={styles.modelModalItemInfo}>
+                        <div className={styles.modelModalItemName}>
+                          {m.label}
+                          {isSelected && <span className={styles.activeTag}>Active</span>}
+                        </div>
+                        <div className={styles.modelModalItemId}>{m.id}</div>
+                      </div>
+
+                      <div className={styles.modelModalItemActions} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className={`${styles.pinBtn} ${isPinned ? styles.pinned : ""}`}
+                          onClick={() => togglePinModel(m.id)}
+                          title={isPinned ? "Unpin model" : "Pin model (max 3)"}
+                        >
+                          {isPinned ? <Pin size={12} /> : <PinOff size={12} />}
+                          <span>{isPinned ? "Pinned" : "Pin"}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className={styles.selectModelBtn}
+                          onClick={() => {
+                            setSelectedModel(m.id);
+                            setIsModelModalOpen(false);
+                          }}
+                        >
+                          {isSelected ? "Selected" : "Select"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
