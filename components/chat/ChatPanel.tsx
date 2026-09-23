@@ -22,6 +22,9 @@ import {
   Pin,
   PinOff,
   Search,
+  RefreshCw,
+  Cpu,
+  Server,
 } from "lucide-react";
 import { useUIStore } from "@/lib/store/uiStore";
 import { MarkdownContent } from "./MarkdownContent";
@@ -416,7 +419,9 @@ export function ChatPanel() {
   const qc = useQueryClient();
   const { chatMode, setChatMode, copilotWidth, setCopilotWidth } = useUIStore();
   const { data: conversations } = useConversations();
-  const { data: availableModels } = useModels();
+  const { data: modelsData, refetch: refetchModels, isFetching: isFetchingModels } = useModels();
+  const availableModels = modelsData?.models ?? [];
+  const hasLocalModels = Boolean(modelsData?.hasLocalModels);
   const createConvo = useCreateConversation();
   const deleteConvo = useDeleteConversation();
   const updateConvoTitle = useUpdateConversationTitle();
@@ -437,6 +442,29 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
   const [isResizing, setIsResizing] = useState(false);
+
+  // Engine selection state: "v2" (Modern Interactions + Local) or "v1" (Legacy untouched)
+  const [selectedEngine, setSelectedEngine] = useState<"v1" | "v2">("v2");
+
+  useEffect(() => {
+    try {
+      const savedEngine = localStorage.getItem("schedulechat_engine_version") as "v1" | "v2" | null;
+      if (savedEngine === "v1" || savedEngine === "v2") {
+        setSelectedEngine(savedEngine);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  function handleEngineChange(engine: "v1" | "v2") {
+    setSelectedEngine(engine);
+    try {
+      localStorage.setItem("schedulechat_engine_version", engine);
+    } catch {
+      // ignore
+    }
+  }
 
   // Pinned models management with localStorage persistence
   const DEFAULT_PINNED_MODELS = useMemo(() => ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"], []);
@@ -666,6 +694,7 @@ export function ChatPanel() {
             const requestBody: Record<string, unknown> = {
               mode: chatMode,
               model: selectedModel,
+              engineVersion: selectedEngine,
               conversationId: currentConversationId,
               stream: true,
             };
@@ -1291,7 +1320,7 @@ export function ChatPanel() {
             <div className={styles.modelModalHeader}>
               <div className={styles.modelModalTitle}>
                 <Sparkles size={14} className={styles.modelModalSparkle} />
-                <span>Select & Pin Models</span>
+                <span>AI Models & Engine Selection</span>
               </div>
               <button
                 type="button"
@@ -1300,6 +1329,54 @@ export function ChatPanel() {
                 title="Close"
               >
                 <X size={14} />
+              </button>
+            </div>
+
+            {/* Engine Selection Section */}
+            <div className={styles.engineSwitcherSection}>
+              <div className={styles.engineSwitcherLabel}>
+                <Cpu size={12} />
+                <span>Execution Engine:</span>
+              </div>
+              <div className={styles.engineSwitcherButtons}>
+                <button
+                  type="button"
+                  className={`${styles.engineSwitchBtn} ${selectedEngine === "v2" ? styles.active : ""}`}
+                  onClick={() => handleEngineChange("v2")}
+                  title="Modern unified architecture with @google/genai Interactions API, Antigravity Agent, and Local LM Studio"
+                >
+                  <Server size={11} />
+                  <span>Modern Engine (v2)</span>
+                  <span className={styles.defaultPill}>Default</span>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.engineSwitchBtn} ${selectedEngine === "v1" ? styles.active : ""}`}
+                  onClick={() => handleEngineChange("v1")}
+                  title="Preserved untouched legacy engine using @google/generative-ai v1 SDK"
+                >
+                  <span>Legacy Engine (v1)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Local LM Studio Status Card */}
+            <div className={styles.localStatusCard}>
+              <div className={styles.localStatusLeft}>
+                <span className={`${styles.statusDot} ${hasLocalModels ? styles.online : styles.offline}`} />
+                <span className={styles.localStatusTitle}>
+                  LM Studio (Local AI): {hasLocalModels ? "Online & Ready" : "Offline"}
+                </span>
+              </div>
+              <button
+                type="button"
+                className={styles.refreshModelsBtn}
+                onClick={() => refetchModels()}
+                disabled={isFetchingModels}
+                title="Refresh local and cloud models"
+              >
+                <RefreshCw size={11} className={isFetchingModels ? styles.spinning : ""} />
+                <span>Refresh</span>
               </button>
             </div>
 
@@ -1347,6 +1424,8 @@ export function ChatPanel() {
                       <div className={styles.modelModalItemInfo}>
                         <div className={styles.modelModalItemName}>
                           {m.label}
+                          {m.isLocal && <span className={styles.localTag}>Local</span>}
+                          {m.isAgent && <span className={styles.agentTag}>Cloud Agent</span>}
                           {isSelected && <span className={styles.activeTag}>Active</span>}
                         </div>
                         <div className={styles.modelModalItemId}>{m.id}</div>
