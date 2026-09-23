@@ -15,7 +15,6 @@ export const AVAILABLE_GEMINI_MODELS = [
   { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
   { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
   { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
 ] as const;
 
 let client: GoogleGenerativeAI | null = null;
@@ -43,15 +42,32 @@ function toGeminiTools(mode: "suggest" | "update"): FunctionDeclarationsTool[] {
   ];
 }
 
-async function generateWithRetry(
+async function generateStreamWithRetry(
   model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>,
   request: { contents: Content[] },
+  onProgress?: (event: { type: string; text: string }) => void,
   maxRetries = 3
 ) {
   let attempt = 0;
   while (true) {
     try {
-      return await model.generateContent(request);
+      const streamResult = await model.generateContentStream(request);
+      const thinkingSteps: string[] = [];
+
+      // Forward chunks as they arrive — keeps SSE alive
+      for await (const chunk of streamResult.stream) {
+        const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+        for (const part of parts) {
+          const p = part as { thought?: boolean; text?: string };
+          if (p.thought && p.text) {
+            thinkingSteps.push(p.text);
+            onProgress?.({ type: "thinking", text: p.text });
+          }
+        }
+      }
+
+      const response = await streamResult.response;
+      return { response, thinkingSteps };
     } catch (err: unknown) {
       attempt++;
       const errObj = err as { status?: number; message?: string };
@@ -110,9 +126,9 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
       text: i === 0 ? "Analyzing request..." : "Evaluating tool output and planning...",
     });
 
-    let result: Awaited<ReturnType<typeof generateWithRetry>>;
+    let result: Awaited<ReturnType<typeof generateStreamWithRetry>>;
     try {
-      result = await generateWithRetry(model, { contents });
+      result = await generateStreamWithRetry(model, { contents }, onProgress ? (e) => onProgress(e as any) : undefined);
     } catch (firstErr: unknown) {
       // If thinkingConfig was rejected, retry without it once
       const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
@@ -124,7 +140,7 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
           systemInstruction: systemPrompt,
           generationConfig: genConfigWithout as unknown as import("@google/generative-ai").GenerationConfig,
         });
-        result = await generateWithRetry(model, { contents });
+        result = await generateStreamWithRetry(model, { contents }, onProgress ? (e) => onProgress(e as any) : undefined);
       } else {
         throw firstErr;
       }
@@ -133,16 +149,8 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
     const candidate = result.response.candidates?.[0];
     if (!candidate?.content) break;
 
-    // Extract any model reasoning / thought parts (Chain of Thought)
-    if (Array.isArray(candidate.content.parts)) {
-      for (const part of candidate.content.parts) {
-        const p = part as { thought?: boolean; text?: string };
-        if (p.thought && p.text) {
-          thinkingSteps.push(p.text);
-          onProgress?.({ type: "thinking", text: p.text });
-        }
-      }
-    }
+    // Thinking was already extracted during streaming
+    thinkingSteps.push(...result.thinkingSteps);
 
     // Append model response to conversation history
     contents.push(candidate.content);

@@ -33,6 +33,7 @@ import {
   useUpdateConversationTitle,
   useRejectAction,
   useUndoAction,
+  useModels,
 } from "@/lib/api/hooks";
 import styles from "./ChatPanel.module.scss";
 
@@ -88,6 +89,17 @@ function ThoughtStepAccordion({
   );
 }
 
+/** Live counter showing elapsed seconds since a given start time. */
+function StepTimer({ startTime }: { startTime: number }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const secs = Math.floor((now - startTime) / 1000);
+  return <span className={styles.stepTimer}>{secs}s</span>;
+}
+
 /** Collapsible thinking accordion, used live during generation and permanently on completed messages. */
 function ThinkingAccordion({
   content,
@@ -101,11 +113,20 @@ function ThinkingAccordion({
   isLive: boolean;
 }) {
   const [expanded, setExpanded] = useState(isLive);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!isLive) return;
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [isLive]);
 
   const stepCount = steps?.length ?? 0;
   const toolCount = steps?.filter((s) => s.kind === "tool").length ?? 0;
 
-  const liveLabel = status || "Thinking & Planning...";
+  const timerSuffix = isLive && elapsed > 0 ? ` ${elapsed}s` : "";
+  const liveLabel = (status || "Thinking & Planning...") + timerSuffix;
   const completedLabel =
     toolCount > 0
       ? `Thought process (${toolCount} tool call${toolCount > 1 ? "s" : ""}, ${stepCount} step${stepCount > 1 ? "s" : ""})`
@@ -144,12 +165,16 @@ function ThinkingAccordion({
                         {step.status === "running" ? (
                           <span className={styles.traceBadgeRunning}>
                             <Sparkles size={9} className={styles.thinkingSpinner} /> running
+                            <StepTimer startTime={step.timestamp} />
                           </span>
                         ) : step.isError ? (
                           <span className={styles.traceBadgeError}>error</span>
                         ) : (
                           <span className={styles.traceBadgeDone}>
                             <Check size={10} /> completed
+                            {step.durationSecs != null && (
+                              <span className={styles.stepTimerDone}>{step.durationSecs}s</span>
+                            )}
                           </span>
                         )}
                       </div>
@@ -361,13 +386,7 @@ function ErrorAccordion({ error }: { error: string }) {
   );
 }
 
-const GEMINI_MODELS = [
-  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Flagship)" },
-  { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
-  { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
-  { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
-];
+
 
 function getActionBadge(type: string) {
   switch (type) {
@@ -394,6 +413,7 @@ export function ChatPanel() {
   const qc = useQueryClient();
   const { chatMode, setChatMode, copilotWidth, setCopilotWidth } = useUIStore();
   const { data: conversations } = useConversations();
+  const { data: availableModels } = useModels();
   const createConvo = useCreateConversation();
   const deleteConvo = useDeleteConversation();
   const updateConvoTitle = useUpdateConversationTitle();
@@ -703,6 +723,7 @@ export function ChatPanel() {
                     matchingTool.status = data.isError ? "error" : "done";
                     matchingTool.toolResult = data.text;
                     matchingTool.isError = data.isError;
+                    matchingTool.durationSecs = Math.floor((Date.now() - matchingTool.timestamp) / 1000);
                   }
                   setLiveTraceSteps([...accumulatedSteps]);
                 } else if (data.type === "step_done") {
@@ -734,7 +755,13 @@ export function ChatPanel() {
                 } else if (data.type === "error") {
                   throw new Error(data.error ?? "Unknown Copilot error");
                 }
+                // heartbeat events are keep-alive pings — ignore
               }
+            }
+
+            // If the stream ended without step_done/done, the server likely timed out
+            if (!stepSucceeded && !stepAbortController.signal.aborted) {
+              throw new Error("Connection lost — the server may have timed out. Please try again.");
             }
 
             if (stepSucceeded) {
@@ -742,8 +769,15 @@ export function ChatPanel() {
             }
           } catch (stepErr: unknown) {
             const isUserAborted = controller.signal.aborted;
+            const isStepTimeout = !isUserAborted && stepAbortController.signal.aborted;
+
             if (isUserAborted) {
               throw stepErr; // Explicit user stop, escape immediately
+            }
+            if (isStepTimeout) {
+              // Step timed out but user didn't stop — treat as retryable
+              lastStepError = new Error("Request timed out — retrying...");
+              if (attempt < 3) continue;
             }
             lastStepError = stepErr instanceof Error ? stepErr : new Error(String(stepErr));
             if (attempt === 3) {
@@ -773,7 +807,10 @@ export function ChatPanel() {
         ]);
       }
     } catch (err: unknown) {
-      const isAborted = controller.signal.aborted || (err instanceof Error && err.name === "AbortError");
+      // ONLY check the main controller — step-timeout AbortErrors should NOT
+      // be classified as "user stopped". This was the root cause of false
+      // "Generation stopped by user" messages.
+      const isAborted = controller.signal.aborted;
       if (isAborted) {
         setNewMessages((m) => [
           ...m,
@@ -1136,7 +1173,7 @@ export function ChatPanel() {
             onChange={(e) => setSelectedModel(e.target.value)}
             title="Select Gemini Model"
           >
-            {GEMINI_MODELS.map((m) => (
+            {(availableModels ?? []).map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}
               </option>

@@ -4,6 +4,26 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api/fetcher";
 import type { TabDTO, TaskDTO, ActiveTimersDTO, AIActionDTO, ChatReplyDTO, AnalyticsDataDTO, ConversationDTO, GoalContextDTO } from "@/lib/api/types";
 
+// ---- Models ----
+
+const FALLBACK_MODELS = [
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
+  { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite" },
+  { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview" },
+];
+
+export function useModels() {
+  return useQuery({
+    queryKey: ["gemini-models"],
+    queryFn: async () => {
+      const res = await apiFetch<{ models: { id: string; label: string }[] }>("/api/models");
+      return res.models?.length ? res.models : FALLBACK_MODELS;
+    },
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    placeholderData: FALLBACK_MODELS,
+  });
+}
+
 // ---- Tabs ----
 
 export function useTabs() {

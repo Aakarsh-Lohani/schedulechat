@@ -22,6 +22,7 @@ export interface TraceStep {
   isError?: boolean;
   status: "running" | "done" | "error";
   timestamp: number;
+  durationSecs?: number;
 }
 
 export interface ChatTurnInput {

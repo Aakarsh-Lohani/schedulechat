@@ -64,7 +64,19 @@ async function runGeminiStep(input: ChatStepInput): Promise<ChatStepResult> {
     text: stepNumber === 1 ? "Analyzing request..." : "Evaluating plan and tool results...",
   });
 
-  const result = await model.generateContent({ contents });
+  const streamResult = await model.generateContentStream({ contents });
+  const thinkingSteps: string[] = [];
+  for await (const chunk of streamResult.stream) {
+    const chunkParts = chunk.candidates?.[0]?.content?.parts ?? [];
+    for (const part of chunkParts) {
+      const p = part as { thought?: boolean; text?: string };
+      if (p.thought && p.text) {
+        thinkingSteps.push(p.text);
+        onProgress?.({ type: "thinking", text: p.text });
+      }
+    }
+  }
+  const result = { response: await streamResult.response };
   const candidate = result.response.candidates?.[0];
   if (!candidate?.content) {
     return {
@@ -72,17 +84,6 @@ async function runGeminiStep(input: ChatStepInput): Promise<ChatStepResult> {
       replyText: "(no response generated)",
       createdActionIds: turnState?.createdActionIds || [],
     };
-  }
-
-  const thinkingSteps: string[] = [];
-  if (Array.isArray(candidate.content.parts)) {
-    for (const part of candidate.content.parts) {
-      const p = part as { thought?: boolean; text?: string };
-      if (p.thought && p.text) {
-        thinkingSteps.push(p.text);
-        onProgress?.({ type: "thinking", text: p.text });
-      }
-    }
   }
 
   contents.push(candidate.content);

@@ -689,6 +689,20 @@
   border-radius: 4px;
 }
 
+.stepTimer {
+  font-size: 9px;
+  color: rgba(196, 181, 253, 0.85);
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+
+.stepTimerDone {
+  font-size: 9px;
+  color: rgba(52, 211, 153, 0.75);
+  font-variant-numeric: tabular-nums;
+  margin-left: 3px;
+}
+
 .traceToolResult {
   font-family: t.$font-mono;
   font-size: 10.5px;
