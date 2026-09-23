@@ -83,6 +83,16 @@
     font-style: italic;
   }
 
+  .markdownImage {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid t.$border-subtle;
+    margin: 8px 0;
+    display: block;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  }
+
   // GFM Table styles
   .tableWrap {
     overflow-x: auto;

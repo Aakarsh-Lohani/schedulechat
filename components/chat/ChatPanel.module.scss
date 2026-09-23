@@ -258,6 +258,228 @@
   }
 }
 
+.modelModalOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(2px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.15s ease;
+}
+
+.modelModal {
+  background: t.$bg-panel;
+  border: 1px solid t.$border-subtle;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.modelModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid t.$border-subtle;
+}
+
+.modelModalTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: t.$text-primary;
+}
+
+.modelModalSparkle {
+  color: t.$accent-ai;
+}
+
+.modelModalCloseBtn {
+  background: none;
+  border: none;
+  color: t.$text-muted;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: t.$text-primary;
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.modelModalSearchRow {
+  position: relative;
+  padding: 10px 16px;
+  border-bottom: 1px solid t.$border-subtle;
+  display: flex;
+  align-items: center;
+}
+
+.modelModalSearchIcon {
+  position: absolute;
+  left: 26px;
+  color: t.$text-muted;
+  pointer-events: none;
+}
+
+.modelModalSearchInput {
+  width: 100%;
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  border-radius: 6px;
+  padding: 6px 28px 6px 28px;
+  font-size: 12px;
+  color: t.$text-primary;
+  outline: none;
+
+  &:focus {
+    border-color: t.$accent-ai;
+  }
+
+  &::placeholder {
+    color: t.$text-muted;
+  }
+}
+
+.modelModalClearBtn {
+  position: absolute;
+  right: 24px;
+  background: none;
+  border: none;
+  color: t.$text-muted;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+
+  &:hover {
+    color: t.$text-primary;
+  }
+}
+
+.modelModalList {
+  padding: 8px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modelModalItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  &.selected {
+    background: rgba(167, 139, 250, 0.1);
+    border-color: rgba(167, 139, 250, 0.3);
+  }
+}
+
+.modelModalItemInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.modelModalItemName {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: t.$text-primary;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.activeTag {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.15);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.modelModalItemId {
+  font-family: t.$font-mono;
+  font-size: 10.5px;
+  color: t.$text-muted;
+}
+
+.modelModalItemActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pinBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  background: t.$bg-elevated;
+  border: 1px solid t.$border-subtle;
+  color: t.$text-muted;
+  transition: all 0.15s ease;
+
+  &:hover {
+    color: t.$text-primary;
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  &.pinned {
+    background: rgba(167, 139, 250, 0.18);
+    border-color: rgba(167, 139, 250, 0.4);
+    color: #c4b5fd;
+  }
+}
+
+.selectModelBtn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: t.$accent-ai;
+  border: none;
+  color: #fff;
+  transition: opacity 0.15s ease;
+
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
+
 .modeToggle {
   display: flex;
   background: t.$bg-elevated;
@@ -687,6 +909,20 @@
   background: rgba(248, 113, 113, 0.12);
   padding: 1px 5px;
   border-radius: 4px;
+}
+
+.stepTimer {
+  font-size: 9px;
+  color: rgba(196, 181, 253, 0.85);
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+
+.stepTimerDone {
+  font-size: 9px;
+  color: rgba(52, 211, 153, 0.75);
+  font-variant-numeric: tabular-nums;
+  margin-left: 3px;
 }
 
 .traceToolResult {

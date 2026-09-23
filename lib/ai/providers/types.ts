@@ -22,6 +22,7 @@ export interface TraceStep {
   isError?: boolean;
   status: "running" | "done" | "error";
   timestamp: number;
+  durationSecs?: number;
 }
 
 export interface ChatTurnInput {
@@ -47,6 +48,7 @@ export interface TurnState {
   anthropicMessages?: unknown[];
   createdActionIds: string[];
   accumulatedThinking: string[];
+  thoughtSignatures?: Record<string, string>;
 }
 
 export interface ChatStepInput {

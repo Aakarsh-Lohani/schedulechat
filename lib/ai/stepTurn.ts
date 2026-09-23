@@ -31,16 +31,6 @@ async function runGeminiStep(input: ChatStepInput): Promise<ChatStepResult> {
   const { userId, mode, systemPrompt, history, message, model: requestedModel, turnState, onProgress } = input;
   const modelName = requestedModel || DEFAULT_GEMINI_MODEL;
 
-  const model = getGeminiClient().getGenerativeModel({
-    model: modelName,
-    tools: toGeminiTools(mode),
-    systemInstruction: systemPrompt,
-    generationConfig: {
-      maxOutputTokens: 8192,
-      thinkingConfig: { includeThoughts: true },
-    } as unknown as import("@google/generative-ai").GenerationConfig,
-  });
-
   // Reconstruct or resume Gemini contents
   let contents: Content[];
   if (turnState?.geminiContents && Array.isArray(turnState.geminiContents)) {
@@ -58,13 +48,105 @@ async function runGeminiStep(input: ChatStepInput): Promise<ChatStepResult> {
     }
   }
 
+  // Heal any functionCall in contents missing thought_signature from turnState
+  if (turnState?.thoughtSignatures) {
+    for (const turn of contents) {
+      if (turn.role === "model" && Array.isArray(turn.parts)) {
+        for (const p of turn.parts as any[]) {
+          if (p.functionCall && !p.thought_signature && !p.thoughtSignature) {
+            const savedSig = turnState.thoughtSignatures[p.functionCall.name] || Object.values(turnState.thoughtSignatures)[0];
+            if (savedSig) {
+              p.thought_signature = savedSig;
+              p.thoughtSignature = savedSig;
+            }
+          }
+        }
+      }
+    }
+  }
+
   const stepNumber = (turnState?.stepNumber || 0) + 1;
   onProgress?.({
     type: "status",
     text: stepNumber === 1 ? "Analyzing request..." : "Evaluating plan and tool results...",
   });
 
-  const result = await model.generateContent({ contents });
+  const genConfigWithThinking = {
+    maxOutputTokens: 8192,
+    thinkingConfig: { includeThoughts: true },
+  };
+  const genConfigWithout = {
+    maxOutputTokens: 8192,
+  };
+
+  let model = getGeminiClient().getGenerativeModel({
+    model: modelName,
+    tools: toGeminiTools(mode),
+    systemInstruction: systemPrompt,
+    generationConfig: genConfigWithThinking as unknown as import("@google/generative-ai").GenerationConfig,
+  });
+
+  let streamResult: Awaited<ReturnType<typeof model.generateContentStream>>;
+  const thinkingSteps: string[] = [];
+  const rawPartsWithSignatures: any[] = [];
+  const collectedSignatures: Record<string, string> = { ...(turnState?.thoughtSignatures || {}) };
+
+  try {
+    streamResult = await model.generateContentStream({ contents });
+    for await (const chunk of streamResult.stream) {
+      const chunkParts = chunk.candidates?.[0]?.content?.parts ?? [];
+      for (const part of chunkParts) {
+        const rawP = part as any;
+        if (rawP.thought_signature || rawP.thoughtSignature) {
+          rawPartsWithSignatures.push(rawP);
+          if (rawP.functionCall?.name) {
+            collectedSignatures[rawP.functionCall.name] = rawP.thought_signature || rawP.thoughtSignature;
+          }
+        }
+        if (rawP.thought && rawP.text) {
+          thinkingSteps.push(rawP.text);
+          onProgress?.({ type: "thinking", text: rawP.text });
+        }
+      }
+    }
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    // If thinkingConfig or thought_signature was rejected, retry once with thinking disabled
+    if (errMsg.includes("thought_signature") || errMsg.includes("thinkingConfig") || errMsg.includes("Invalid argument")) {
+      model = getGeminiClient().getGenerativeModel({
+        model: modelName,
+        tools: toGeminiTools(mode),
+        systemInstruction: systemPrompt,
+        generationConfig: genConfigWithout as unknown as import("@google/generative-ai").GenerationConfig,
+      });
+
+      // Strip existing thought parts from contents to avoid schema validation conflicts
+      const sanitizedContents = contents.map((turn) => {
+        if (turn.role === "model" && Array.isArray(turn.parts)) {
+          return {
+            ...turn,
+            parts: (turn.parts as any[]).filter((p) => !p.thought),
+          };
+        }
+        return turn;
+      });
+
+      streamResult = await model.generateContentStream({ contents: sanitizedContents });
+      for await (const chunk of streamResult.stream) {
+        const chunkParts = chunk.candidates?.[0]?.content?.parts ?? [];
+        for (const part of chunkParts) {
+          const rawP = part as any;
+          if (rawP.thought_signature || rawP.thoughtSignature) {
+            rawPartsWithSignatures.push(rawP);
+          }
+        }
+      }
+    } else {
+      throw err;
+    }
+  }
+
+  const result = { response: await streamResult.response };
   const candidate = result.response.candidates?.[0];
   if (!candidate?.content) {
     return {
@@ -74,20 +156,46 @@ async function runGeminiStep(input: ChatStepInput): Promise<ChatStepResult> {
     };
   }
 
-  const thinkingSteps: string[] = [];
+  // Restore thought_signature onto candidate.content.parts if stripped by legacy SDK's aggregateResponses
   if (Array.isArray(candidate.content.parts)) {
-    for (const part of candidate.content.parts) {
-      const p = part as { thought?: boolean; text?: string };
-      if (p.thought && p.text) {
-        thinkingSteps.push(p.text);
-        onProgress?.({ type: "thinking", text: p.text });
+    for (const part of candidate.content.parts as any[]) {
+      if (part.functionCall) {
+        const match =
+          rawPartsWithSignatures.find((r) => r.functionCall?.name === part.functionCall.name && (r.thought_signature || r.thoughtSignature)) ||
+          rawPartsWithSignatures.find((r) => r.thought_signature || r.thoughtSignature);
+
+        const sig = match?.thought_signature || match?.thoughtSignature || collectedSignatures[part.functionCall.name] || Object.values(collectedSignatures)[0];
+        if (sig) {
+          part.thought_signature = sig;
+          part.thoughtSignature = sig;
+          collectedSignatures[part.functionCall.name] = sig;
+        }
       }
     }
   }
 
   contents.push(candidate.content);
 
-  const responseText = result.response.text?.() || "";
+  // Extract images if generated by multimodal/image models (e.g. Nano Banana / gemini-3-pro-image)
+  const imageMarkdownParts: string[] = [];
+  if (Array.isArray(candidate.content.parts)) {
+    for (const part of candidate.content.parts) {
+      const inline = (part as { inlineData?: { mimeType: string; data: string } }).inlineData;
+      if (inline?.data && (inline.mimeType?.startsWith("image/") || inline.mimeType?.includes("image"))) {
+        imageMarkdownParts.push(`![Generated Image](data:${inline.mimeType};base64,${inline.data})`);
+      }
+    }
+  }
+
+  let responseText = "";
+  try {
+    responseText = result.response.text?.() || "";
+  } catch {
+    // Candidate may only contain binary/image parts
+  }
+  if (imageMarkdownParts.length > 0) {
+    responseText = (responseText.trim() ? `${responseText.trim()}\n\n` : "") + imageMarkdownParts.join("\n\n");
+  }
   const calls = result.response.functionCalls();
 
   // If intermediate text alongside calls, stream as thinking
@@ -157,6 +265,7 @@ async function runGeminiStep(input: ChatStepInput): Promise<ChatStepResult> {
     geminiContents: contents,
     createdActionIds: [...(turnState?.createdActionIds || []), ...createdActionIdsThisStep],
     accumulatedThinking: [...(turnState?.accumulatedThinking || []), ...thinkingSteps],
+    thoughtSignatures: collectedSignatures,
   };
 
   return {

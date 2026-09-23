@@ -19,6 +19,9 @@ import {
   AlertCircle,
   Clock,
   History,
+  Pin,
+  PinOff,
+  Search,
 } from "lucide-react";
 import { useUIStore } from "@/lib/store/uiStore";
 import { MarkdownContent } from "./MarkdownContent";
@@ -33,6 +36,7 @@ import {
   useUpdateConversationTitle,
   useRejectAction,
   useUndoAction,
+  useModels,
 } from "@/lib/api/hooks";
 import styles from "./ChatPanel.module.scss";
 
@@ -88,6 +92,17 @@ function ThoughtStepAccordion({
   );
 }
 
+/** Live counter showing elapsed seconds since a given start time. */
+function StepTimer({ startTime }: { startTime: number }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const secs = Math.floor((now - startTime) / 1000);
+  return <span className={styles.stepTimer}>{secs}s</span>;
+}
+
 /** Collapsible thinking accordion, used live during generation and permanently on completed messages. */
 function ThinkingAccordion({
   content,
@@ -101,11 +116,20 @@ function ThinkingAccordion({
   isLive: boolean;
 }) {
   const [expanded, setExpanded] = useState(isLive);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!isLive) return;
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [isLive]);
 
   const stepCount = steps?.length ?? 0;
   const toolCount = steps?.filter((s) => s.kind === "tool").length ?? 0;
 
-  const liveLabel = status || "Thinking & Planning...";
+  const timerSuffix = isLive && elapsed > 0 ? ` ${elapsed}s` : "";
+  const liveLabel = (status || "Thinking & Planning...") + timerSuffix;
   const completedLabel =
     toolCount > 0
       ? `Thought process (${toolCount} tool call${toolCount > 1 ? "s" : ""}, ${stepCount} step${stepCount > 1 ? "s" : ""})`
@@ -144,12 +168,16 @@ function ThinkingAccordion({
                         {step.status === "running" ? (
                           <span className={styles.traceBadgeRunning}>
                             <Sparkles size={9} className={styles.thinkingSpinner} /> running
+                            <StepTimer startTime={step.timestamp} />
                           </span>
                         ) : step.isError ? (
                           <span className={styles.traceBadgeError}>error</span>
                         ) : (
                           <span className={styles.traceBadgeDone}>
                             <Check size={10} /> completed
+                            {step.durationSecs != null && (
+                              <span className={styles.stepTimerDone}>{step.durationSecs}s</span>
+                            )}
                           </span>
                         )}
                       </div>
@@ -361,13 +389,7 @@ function ErrorAccordion({ error }: { error: string }) {
   );
 }
 
-const GEMINI_MODELS = [
-  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Flagship)" },
-  { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
-  { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
-  { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
-];
+
 
 function getActionBadge(type: string) {
   switch (type) {
@@ -394,6 +416,7 @@ export function ChatPanel() {
   const qc = useQueryClient();
   const { chatMode, setChatMode, copilotWidth, setCopilotWidth } = useUIStore();
   const { data: conversations } = useConversations();
+  const { data: availableModels } = useModels();
   const createConvo = useCreateConversation();
   const deleteConvo = useDeleteConversation();
   const updateConvoTitle = useUpdateConversationTitle();
@@ -414,6 +437,48 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
   const [isResizing, setIsResizing] = useState(false);
+
+  // Pinned models management with localStorage persistence
+  const DEFAULT_PINNED_MODELS = useMemo(() => ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"], []);
+  const [pinnedModels, setPinnedModels] = useState<string[]>(DEFAULT_PINNED_MODELS);
+  const [isModelModalOpen, setIsModelModalOpen] = useState(false);
+  const [modelSearchQuery, setModelSearchQuery] = useState("");
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("schedulechat_pinned_models");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPinnedModels(parsed.slice(0, 3));
+        }
+      }
+    } catch {
+      // fallback to default
+    }
+  }, []);
+
+  function togglePinModel(modelId: string) {
+    setPinnedModels((prev) => {
+      let updated: string[];
+      if (prev.includes(modelId)) {
+        updated = prev.filter((id) => id !== modelId);
+      } else {
+        // Keep up to 3 pinned models: replace the last one if full
+        if (prev.length >= 3) {
+          updated = [prev[0]!, prev[1]!, modelId];
+        } else {
+          updated = [...prev, modelId];
+        }
+      }
+      try {
+        localStorage.setItem("schedulechat_pinned_models", JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+  }
 
   // Live thinking & streaming progress state
   const [isGenerating, setIsGenerating] = useState(false);
@@ -703,6 +768,7 @@ export function ChatPanel() {
                     matchingTool.status = data.isError ? "error" : "done";
                     matchingTool.toolResult = data.text;
                     matchingTool.isError = data.isError;
+                    matchingTool.durationSecs = Math.floor((Date.now() - matchingTool.timestamp) / 1000);
                   }
                   setLiveTraceSteps([...accumulatedSteps]);
                 } else if (data.type === "step_done") {
@@ -734,7 +800,13 @@ export function ChatPanel() {
                 } else if (data.type === "error") {
                   throw new Error(data.error ?? "Unknown Copilot error");
                 }
+                // heartbeat events are keep-alive pings — ignore
               }
+            }
+
+            // If the stream ended without step_done/done, the server likely timed out
+            if (!stepSucceeded && !stepAbortController.signal.aborted) {
+              throw new Error("Connection lost — the server may have timed out. Please try again.");
             }
 
             if (stepSucceeded) {
@@ -742,8 +814,15 @@ export function ChatPanel() {
             }
           } catch (stepErr: unknown) {
             const isUserAborted = controller.signal.aborted;
+            const isStepTimeout = !isUserAborted && stepAbortController.signal.aborted;
+
             if (isUserAborted) {
               throw stepErr; // Explicit user stop, escape immediately
+            }
+            if (isStepTimeout) {
+              // Step timed out but user didn't stop — treat as retryable
+              lastStepError = new Error("Request timed out — retrying...");
+              if (attempt < 3) continue;
             }
             lastStepError = stepErr instanceof Error ? stepErr : new Error(String(stepErr));
             if (attempt === 3) {
@@ -773,7 +852,10 @@ export function ChatPanel() {
         ]);
       }
     } catch (err: unknown) {
-      const isAborted = controller.signal.aborted || (err instanceof Error && err.name === "AbortError");
+      // ONLY check the main controller — step-timeout AbortErrors should NOT
+      // be classified as "user stopped". This was the root cause of false
+      // "Generation stopped by user" messages.
+      const isAborted = controller.signal.aborted;
       if (isAborted) {
         setNewMessages((m) => [
           ...m,
@@ -1130,17 +1212,38 @@ export function ChatPanel() {
             </button>
           </div>
 
+          {/* Model selector dropdown (pinned models + More models option) */}
           <select
             className={styles.modelSelect}
             value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value === "MORE_MODELS") {
+                setIsModelModalOpen(true);
+              } else {
+                setSelectedModel(e.target.value);
+              }
+            }}
             title="Select Gemini Model"
           >
-            {GEMINI_MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
+            {/* 3 Pinned Models */}
+            {pinnedModels.map((pId) => {
+              const modelObj = (availableModels ?? []).find((m) => m.id === pId);
+              return (
+                <option key={pId} value={pId}>
+                  {modelObj ? modelObj.label : pId} [Pinned]
+                </option>
+              );
+            })}
+
+            {/* If currently selected model is not in the pinned list, display it in dropdown */}
+            {!pinnedModels.includes(selectedModel) && (
+              <option value={selectedModel}>
+                {(availableModels ?? []).find((m) => m.id === selectedModel)?.label || selectedModel} [Active]
               </option>
-            ))}
+            )}
+
+            {/* 4th row: opens the full models modal */}
+            <option value="MORE_MODELS">More models…</option>
           </select>
         </div>
 
@@ -1180,6 +1283,104 @@ export function ChatPanel() {
           )}
         </div>
       </div>
+
+      {/* More Models Modal Dialog */}
+      {isModelModalOpen && (
+        <div className={styles.modelModalOverlay} onClick={() => setIsModelModalOpen(false)}>
+          <div className={styles.modelModal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modelModalHeader}>
+              <div className={styles.modelModalTitle}>
+                <Sparkles size={14} className={styles.modelModalSparkle} />
+                <span>Select & Pin Models</span>
+              </div>
+              <button
+                type="button"
+                className={styles.modelModalCloseBtn}
+                onClick={() => setIsModelModalOpen(false)}
+                title="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className={styles.modelModalSearchRow}>
+              <Search size={13} className={styles.modelModalSearchIcon} />
+              <input
+                type="text"
+                className={styles.modelModalSearchInput}
+                placeholder="Search models (e.g. flash, pro, image, 3.8)..."
+                value={modelSearchQuery}
+                onChange={(e) => setModelSearchQuery(e.target.value)}
+                autoFocus
+              />
+              {modelSearchQuery && (
+                <button
+                  type="button"
+                  className={styles.modelModalClearBtn}
+                  onClick={() => setModelSearchQuery("")}
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+
+            <div className={styles.modelModalList}>
+              {(availableModels ?? [])
+                .filter((m) => {
+                  if (!modelSearchQuery.trim()) return true;
+                  const q = modelSearchQuery.toLowerCase();
+                  return m.id.toLowerCase().includes(q) || m.label.toLowerCase().includes(q);
+                })
+                .map((m) => {
+                  const isPinned = pinnedModels.includes(m.id);
+                  const isSelected = selectedModel === m.id;
+
+                  return (
+                    <div
+                      key={m.id}
+                      className={`${styles.modelModalItem} ${isSelected ? styles.selected : ""}`}
+                      onClick={() => {
+                        setSelectedModel(m.id);
+                        setIsModelModalOpen(false);
+                      }}
+                    >
+                      <div className={styles.modelModalItemInfo}>
+                        <div className={styles.modelModalItemName}>
+                          {m.label}
+                          {isSelected && <span className={styles.activeTag}>Active</span>}
+                        </div>
+                        <div className={styles.modelModalItemId}>{m.id}</div>
+                      </div>
+
+                      <div className={styles.modelModalItemActions} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className={`${styles.pinBtn} ${isPinned ? styles.pinned : ""}`}
+                          onClick={() => togglePinModel(m.id)}
+                          title={isPinned ? "Unpin model" : "Pin model (max 3)"}
+                        >
+                          {isPinned ? <Pin size={12} /> : <PinOff size={12} />}
+                          <span>{isPinned ? "Pinned" : "Pin"}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className={styles.selectModelBtn}
+                          onClick={() => {
+                            setSelectedModel(m.id);
+                            setIsModelModalOpen(false);
+                          }}
+                        >
+                          {isSelected ? "Selected" : "Select"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

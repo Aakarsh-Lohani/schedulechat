@@ -98,27 +98,37 @@ export async function POST(req: Request) {
         }
 
         try {
-          const result = await runChatStep({
-            userId,
-            mode,
-            systemPrompt,
-            history: historyDocs.map((m) => ({
-              role: m.role === "assistant" ? "assistant" : "user",
-              content: m.content,
-            })),
-            message: incomingTurnState ? undefined : message,
-            model,
-            turnState: incomingTurnState as unknown as TurnState,
-            onProgress: (event) => {
-              emit({
-                type: event.type,
-                text: event.text,
-                toolName: event.toolName,
-                toolArgs: event.toolArgs,
-                isError: event.isError,
-              });
-            },
-          });
+          // Heartbeat keeps the SSE connection alive during long Gemini thinking
+          const heartbeatInterval = setInterval(() => {
+            emit({ type: "heartbeat" });
+          }, 15_000);
+
+          let result: Awaited<ReturnType<typeof runChatStep>>;
+          try {
+            result = await runChatStep({
+              userId,
+              mode,
+              systemPrompt,
+              history: historyDocs.map((m) => ({
+                role: m.role === "assistant" ? "assistant" : "user",
+                content: m.content,
+              })),
+              message: incomingTurnState ? undefined : message,
+              model,
+              turnState: incomingTurnState as unknown as TurnState,
+              onProgress: (event) => {
+                emit({
+                  type: event.type,
+                  text: event.text,
+                  toolName: event.toolName,
+                  toolArgs: event.toolArgs,
+                  isError: event.isError,
+                });
+              },
+            });
+          } finally {
+            clearInterval(heartbeatInterval);
+          }
 
           if (result.isFinal) {
             const assistantMessage = await ChatMessage.create({

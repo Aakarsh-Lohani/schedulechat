@@ -15,7 +15,6 @@ export const AVAILABLE_GEMINI_MODELS = [
   { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
   { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
   { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
 ] as const;
 
 let client: GoogleGenerativeAI | null = null;
@@ -43,15 +42,57 @@ function toGeminiTools(mode: "suggest" | "update"): FunctionDeclarationsTool[] {
   ];
 }
 
-async function generateWithRetry(
+async function generateStreamWithRetry(
   model: ReturnType<GoogleGenerativeAI["getGenerativeModel"]>,
   request: { contents: Content[] },
+  onProgress?: (event: { type: string; text: string }) => void,
   maxRetries = 3
 ) {
   let attempt = 0;
   while (true) {
     try {
-      return await model.generateContent(request);
+      const streamResult = await model.generateContentStream(request);
+      const thinkingSteps: string[] = [];
+      const rawPartsWithSignatures: any[] = [];
+
+      // Forward chunks as they arrive — keeps SSE alive
+      for await (const chunk of streamResult.stream) {
+        const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+        for (const part of parts) {
+          const rawP = part as any;
+          if (rawP.thought_signature || rawP.thoughtSignature || rawP.functionCall) {
+            rawPartsWithSignatures.push(rawP);
+          }
+          const p = part as { thought?: boolean; text?: string };
+          if (p.thought && p.text) {
+            thinkingSteps.push(p.text);
+            onProgress?.({ type: "thinking", text: p.text });
+          }
+        }
+      }
+
+      const response = await streamResult.response;
+
+      // Restore thought_signature stripped by legacy SDK's aggregateResponses
+      const candidate = response.candidates?.[0];
+      if (candidate?.content && Array.isArray(candidate.content.parts)) {
+        for (const p of candidate.content.parts as any[]) {
+          if (p.functionCall && !p.thought_signature && !p.thoughtSignature) {
+            const match =
+              rawPartsWithSignatures.find(
+                (r) => r.functionCall?.name === p.functionCall.name && (r.thought_signature || r.thoughtSignature)
+              ) || rawPartsWithSignatures.find((r) => r.thought_signature || r.thoughtSignature);
+
+            const sig = match?.thought_signature || match?.thoughtSignature;
+            if (sig) {
+              p.thought_signature = sig;
+              p.thoughtSignature = sig;
+            }
+          }
+        }
+      }
+
+      return { response, thinkingSteps };
     } catch (err: unknown) {
       attempt++;
       const errObj = err as { status?: number; message?: string };
@@ -110,13 +151,13 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
       text: i === 0 ? "Analyzing request..." : "Evaluating tool output and planning...",
     });
 
-    let result: Awaited<ReturnType<typeof generateWithRetry>>;
+    let result: Awaited<ReturnType<typeof generateStreamWithRetry>>;
     try {
-      result = await generateWithRetry(model, { contents });
+      result = await generateStreamWithRetry(model, { contents }, onProgress ? (e) => onProgress(e as any) : undefined);
     } catch (firstErr: unknown) {
       // If thinkingConfig was rejected, retry without it once
       const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
-      if (thinkingEnabled && (errMsg.includes("thinkingConfig") || errMsg.includes("Invalid argument"))) {
+      if (thinkingEnabled && (errMsg.includes("thinkingConfig") || errMsg.includes("Invalid argument") || errMsg.includes("thought_signature"))) {
         thinkingEnabled = false;
         model = getClient().getGenerativeModel({
           model: modelName,
@@ -124,7 +165,7 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
           systemInstruction: systemPrompt,
           generationConfig: genConfigWithout as unknown as import("@google/generative-ai").GenerationConfig,
         });
-        result = await generateWithRetry(model, { contents });
+        result = await generateStreamWithRetry(model, { contents }, onProgress ? (e) => onProgress(e as any) : undefined);
       } else {
         throw firstErr;
       }
@@ -133,22 +174,33 @@ export async function runGeminiChat(input: ChatTurnInput): Promise<ChatTurnResul
     const candidate = result.response.candidates?.[0];
     if (!candidate?.content) break;
 
-    // Extract any model reasoning / thought parts (Chain of Thought)
-    if (Array.isArray(candidate.content.parts)) {
-      for (const part of candidate.content.parts) {
-        const p = part as { thought?: boolean; text?: string };
-        if (p.thought && p.text) {
-          thinkingSteps.push(p.text);
-          onProgress?.({ type: "thinking", text: p.text });
-        }
-      }
-    }
+    // Thinking was already extracted during streaming
+    thinkingSteps.push(...result.thinkingSteps);
 
     // Append model response to conversation history
     contents.push(candidate.content);
 
-    // Capture text output if present
-    const responseText = result.response.text?.();
+    // Extract images if generated by multimodal/image models (e.g. Nano Banana / gemini-3-pro-image)
+    const imageMarkdownParts: string[] = [];
+    if (Array.isArray(candidate.content.parts)) {
+      for (const part of candidate.content.parts) {
+        const inline = (part as { inlineData?: { mimeType: string; data: string } }).inlineData;
+        if (inline?.data && (inline.mimeType?.startsWith("image/") || inline.mimeType?.includes("image"))) {
+          imageMarkdownParts.push(`![Generated Image](data:${inline.mimeType};base64,${inline.data})`);
+        }
+      }
+    }
+
+    // Capture text output if present (safely handle binary/image-only candidates)
+    let responseText = "";
+    try {
+      responseText = result.response.text?.() || "";
+    } catch {
+      // Candidate may contain only image/binary parts
+    }
+    if (imageMarkdownParts.length > 0) {
+      responseText = (responseText.trim() ? `${responseText.trim()}\n\n` : "") + imageMarkdownParts.join("\n\n");
+    }
     const calls = result.response.functionCalls();
 
     if (responseText && responseText.trim()) {
