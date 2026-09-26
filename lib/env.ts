@@ -3,6 +3,8 @@ import { z } from "zod";
 const envSchema = z
   .object({
     AI_PROVIDER: z.enum(["anthropic", "gemini"]).default("anthropic"),
+    AI_ENGINE_VERSION: z.enum(["v1", "v2"]).default("v2"),
+    LOCAL_AI_BASE_URL: z.string().default("http://127.0.0.1:1234/v1"),
     ANTHROPIC_API_KEY: z.string().optional(),
     GEMINI_API_KEY: z.string().optional(),
     MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),

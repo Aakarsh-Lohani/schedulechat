@@ -6,21 +6,43 @@ import type { TabDTO, TaskDTO, ActiveTimersDTO, AIActionDTO, ChatReplyDTO, Analy
 
 // ---- Models ----
 
-const FALLBACK_MODELS = [
+export interface ModelOption {
+  id: string;
+  label: string;
+  isLocal?: boolean;
+  isAgent?: boolean;
+}
+
+export interface ModelsResponse {
+  models: ModelOption[];
+  hasLocalModels?: boolean;
+  engineDefault?: "v1" | "v2";
+}
+
+const FALLBACK_MODELS: ModelOption[] = [
   { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
   { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite" },
   { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview" },
+  { id: "antigravity-preview-05-2026", label: "Antigravity Agent [Cloud Agent]", isAgent: true },
 ];
 
 export function useModels() {
   return useQuery({
-    queryKey: ["gemini-models"],
+    queryKey: ["ai-models"],
     queryFn: async () => {
-      const res = await apiFetch<{ models: { id: string; label: string }[] }>("/api/models");
-      return res.models?.length ? res.models : FALLBACK_MODELS;
+      const res = await apiFetch<ModelsResponse>("/api/models");
+      return {
+        models: res.models?.length ? res.models : FALLBACK_MODELS,
+        hasLocalModels: Boolean(res.hasLocalModels),
+        engineDefault: res.engineDefault || "v2",
+      };
     },
-    staleTime: 10 * 60 * 1000, // 10 minutes
-    placeholderData: FALLBACK_MODELS,
+    staleTime: 60 * 1000, // 1 minute (allows dynamic detection when LM Studio starts/stops)
+    placeholderData: {
+      models: FALLBACK_MODELS,
+      hasLocalModels: false,
+      engineDefault: "v2",
+    },
   });
 }
 

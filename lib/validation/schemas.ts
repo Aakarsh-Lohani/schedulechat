@@ -61,5 +61,6 @@ export const chatRequestSchema = z.object({
   model: z.string().optional(),
   conversationId: objectIdString.optional(),
   stream: z.boolean().optional(),
+  engineVersion: z.enum(["v1", "v2"]).optional(),
   turnState: z.record(z.string(), z.unknown()).optional(),
 });

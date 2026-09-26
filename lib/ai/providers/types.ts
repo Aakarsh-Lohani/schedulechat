@@ -42,8 +42,10 @@ export interface ChatTurnResult {
 }
 
 export interface TurnState {
-  provider: "gemini" | "anthropic";
+  provider: "gemini" | "anthropic" | "local";
   stepNumber: number;
+  engineVersion?: "v1" | "v2";
+  interactionId?: string;
   geminiContents?: unknown[];
   anthropicMessages?: unknown[];
   createdActionIds: string[];
@@ -58,8 +60,10 @@ export interface ChatStepInput {
   history: ChatTurnMessage[];
   message?: string;
   model?: string;
+  engineVersion?: "v1" | "v2";
   turnState?: TurnState;
   onProgress?: (event: ChatProgressEvent) => void;
+  signal?: AbortSignal;
 }
 
 export interface ChatStepResult {

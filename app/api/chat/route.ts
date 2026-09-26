@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request", code: "VALIDATION_ERROR" }, { status: 400 });
   }
-  const { message, mode, model, conversationId: requestedConvoId, stream: isStreaming, turnState: incomingTurnState } = parsed.data;
+  const { message, mode, model, conversationId: requestedConvoId, stream: isStreaming, engineVersion, turnState: incomingTurnState } = parsed.data;
 
   // Strict Suggest Mode isolation: if MONGODB_READONLY_URI is not configured, do not fall back to main env!
   if (mode === "suggest" && !process.env.MONGODB_READONLY_URI) {
@@ -115,7 +115,9 @@ export async function POST(req: Request) {
               })),
               message: incomingTurnState ? undefined : message,
               model,
+              engineVersion,
               turnState: incomingTurnState as unknown as TurnState,
+              signal: req.signal,
               onProgress: (event) => {
                 emit({
                   type: event.type,
