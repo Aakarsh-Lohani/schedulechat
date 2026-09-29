@@ -29,6 +29,7 @@ export interface TaskDTO {
 export interface TimerSlotDTO {
   id: string;
   taskId: string;
+  scheduledTaskId?: string;
   taskTitle: string;
   isScheduledTask?: boolean;
   status: "countdown" | "running" | "paused";

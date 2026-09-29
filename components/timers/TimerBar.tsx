@@ -78,12 +78,42 @@ function SlotView({
     }
   }, [sessionId, isCountdown]);
 
-  const [scheduledApproved, setScheduledApproved] = useState(false);
+  const isPaused = session?.status === "paused";
+  const totalPaused = session?.totalPausedSeconds ?? 0;
+  const currentPauseDuration =
+    isPaused && session?.pausedAt
+      ? Math.max(0, (now - new Date(session.pausedAt).getTime()) / 1000)
+      : 0;
 
-  // Reset approval on session change
+  const workElapsedSeconds = Math.max(
+    0,
+    (now - startedAtMs) / 1000 - COUNTDOWN_SECONDS - totalPaused - currentPauseDuration
+  );
+  const plannedTotal = (session?.plannedDurationSeconds ?? 0) + (session?.extendedBySeconds ?? 0);
+  const remainingRunning = plannedTotal - workElapsedSeconds;
+  const isOver = remainingRunning <= 0;
+
+  // Auto-stop scheduled task when planned duration expires
+  const autoStoppedRef = useRef<string | null>(null);
   useEffect(() => {
-    setScheduledApproved(false);
-  }, [sessionId]);
+    if (
+      session?.isScheduledTask &&
+      session?.status === "running" &&
+      isOver &&
+      autoStoppedRef.current !== session.id
+    ) {
+      autoStoppedRef.current = session.id;
+      stopTimer.mutate({ id: session.id, followed: true, autoStopped: true });
+    }
+  }, [session?.isScheduledTask, session?.status, session?.id, isOver, stopTimer]);
+
+  const isMutating =
+    confirmStart.isPending ||
+    cancelTimer.isPending ||
+    extendTimer.isPending ||
+    pauseTimer.isPending ||
+    resumeTimer.isPending ||
+    stopTimer.isPending;
 
   if (!session) {
     return (
@@ -103,28 +133,17 @@ function SlotView({
           <span className={styles.value}>in {remaining}s</span>
         </div>
         <div className={styles.actions}>
-          <button className={styles.miniBtn} onClick={() => cancelTimer.mutate(session.id)}>
+          <button
+            className={styles.miniBtn}
+            onClick={() => cancelTimer.mutate(session.id)}
+            disabled={isMutating}
+          >
             Cancel
           </button>
         </div>
       </div>
     );
   }
-
-  const isPaused = session.status === "paused";
-  const totalPaused = session.totalPausedSeconds ?? 0;
-  const currentPauseDuration =
-    isPaused && session.pausedAt
-      ? Math.max(0, (now - new Date(session.pausedAt).getTime()) / 1000)
-      : 0;
-
-  const workElapsedSeconds = Math.max(
-    0,
-    (now - startedAtMs) / 1000 - COUNTDOWN_SECONDS - totalPaused - currentPauseDuration
-  );
-  const plannedTotal = session.plannedDurationSeconds + session.extendedBySeconds;
-  const remainingRunning = plannedTotal - workElapsedSeconds;
-  const isOver = remainingRunning <= 0;
 
   return (
     <div ref={setNodeRef} className={`${styles.slot} ${isOver ? styles.over : ""} ${isPaused ? styles.paused : ""}`}>
@@ -139,29 +158,12 @@ function SlotView({
         </span>
       </div>
       <div className={styles.actions}>
-        {session.isScheduledTask && !scheduledApproved && (
-          <div className={styles.scheduledApproval}>
-            <span className={styles.approvalPrompt}>Followed?</span>
-            <button
-              type="button"
-              className={`${styles.miniBtn} ${styles.approveBtn}`}
-              onClick={() => setScheduledApproved(true)}
-              title="Yes, count this time"
-            >
-              Yes
-            </button>
-            <button
-              type="button"
-              className={`${styles.miniBtn} ${styles.rejectBtn}`}
-              onClick={() => stopTimer.mutate({ id: session.id, followed: false })}
-              title="No, mark not followed and discard time"
-            >
-              No
-            </button>
-          </div>
-        )}
-        {isOver && (
-          <button className={styles.miniBtn} onClick={() => extendTimer.mutate({ id: session.id, seconds: 600 })}>
+        {isOver && !session.isScheduledTask && (
+          <button
+            className={styles.miniBtn}
+            onClick={() => extendTimer.mutate({ id: session.id, seconds: 600 })}
+            disabled={isMutating}
+          >
             +10m
           </button>
         )}
@@ -169,6 +171,7 @@ function SlotView({
           <button
             className={styles.miniBtn}
             onClick={() => pauseTimer.mutate(session.id)}
+            disabled={isMutating}
             title="Pause timer"
           >
             Pause
@@ -178,12 +181,17 @@ function SlotView({
           <button
             className={`${styles.miniBtn} ${styles.resumeBtn}`}
             onClick={() => resumeTimer.mutate(session.id)}
+            disabled={isMutating}
             title="Resume timer"
           >
             Resume
           </button>
         )}
-        <button className={styles.miniBtn} onClick={() => stopTimer.mutate(session.id)}>
+        <button
+          className={styles.miniBtn}
+          onClick={() => stopTimer.mutate({ id: session.id, followed: true, autoStopped: false })}
+          disabled={isMutating}
+        >
           Stop
         </button>
       </div>

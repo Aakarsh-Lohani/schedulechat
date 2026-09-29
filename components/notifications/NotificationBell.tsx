@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bell, Check, Clock, Play, X } from "lucide-react";
+import { Bell, Check, Clock, X, Loader2 } from "lucide-react";
 import {
   useNotifications,
   useNotificationAction,
   useActiveTimers,
-  useStartTimer,
   type NotificationDTO,
 } from "@/lib/api/hooks";
 import { formatTimeOfDay } from "@/lib/calendar/recurrence";
@@ -19,15 +18,26 @@ export function NotificationBell() {
   const { data } = useNotifications();
   const { data: activeTimers } = useActiveTimers();
   const notificationAction = useNotificationAction();
-  const startTimer = useStartTimer();
 
   const notifications = data?.notifications ?? [];
-  const pendingCount = notifications.filter((n) => n.status === "pending").length;
 
-  // Determine available timer slot
-  const slot1Free = !activeTimers?.slots["1"];
-  const slot2Free = !activeTimers?.slots["2"];
-  const availableSlot: 1 | 2 | null = slot1Free ? 1 : slot2Free ? 2 : null;
+  // Helper to determine active timer slot for a scheduled task if running
+  function getRunningSlot(scheduledTaskId: string): 1 | 2 | null {
+    if (activeTimers?.slots["1"]?.scheduledTaskId === scheduledTaskId) return 1;
+    if (activeTimers?.slots["2"]?.scheduledTaskId === scheduledTaskId) return 2;
+    return null;
+  }
+
+  // Count only notifications that require user confirmation (routine ended/auto-stopped without manual stop)
+  const pendingCount = notifications.filter((n) => {
+    if (n.status !== "pending") return false;
+    if (getRunningSlot(n.scheduledTaskId)) return false;
+    const [startH, startM] = (n.startTime || "00:00").split(":").map(Number);
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const taskStartMins = (startH ?? 0) * 60 + (startM ?? 0);
+    return nowMins >= taskStartMins;
+  }).length;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -44,23 +54,18 @@ export function NotificationBell() {
     };
   }, [open]);
 
-  function handleStart(n: NotificationDTO) {
-    if (!availableSlot) {
-      alert("Both timer slots are currently active. Stop one before starting this scheduled task.");
-      return;
-    }
-    notificationAction.mutate({ id: n.id, action: "start", slot: availableSlot });
-  }
-
   function handleApprove(n: NotificationDTO) {
+    if (notificationAction.isPending) return;
     notificationAction.mutate({ id: n.id, action: "approve" });
   }
 
   function handleReject(n: NotificationDTO) {
+    if (notificationAction.isPending) return;
     notificationAction.mutate({ id: n.id, action: "reject" });
   }
 
   function handleDismiss(n: NotificationDTO) {
+    if (notificationAction.isPending) return;
     notificationAction.mutate({ id: n.id, action: "dismiss" });
   }
 
@@ -93,84 +98,96 @@ export function NotificationBell() {
             {notifications.length === 0 ? (
               <div className={styles.empty}>No scheduled task alerts for today</div>
             ) : (
-              notifications.map((n) => (
-                <div key={n.id} className={`${styles.item} ${styles[n.status]}`}>
-                  <div className={styles.itemHeader}>
-                    <h5 className={styles.itemTitle}>{n.title}</h5>
-                    {n.status === "pending" && (
-                      <button
-                        type="button"
-                        className={styles.actionBtn + " " + styles.dismiss}
-                        onClick={() => handleDismiss(n)}
-                        title="Dismiss"
-                      >
-                        <X size={12} />
-                      </button>
+              notifications.map((n) => {
+                const runningSlot = getRunningSlot(n.scheduledTaskId);
+                const [startH, startM] = (n.startTime || "00:00").split(":").map(Number);
+                const now = new Date();
+                const nowMins = now.getHours() * 60 + now.getMinutes();
+                const taskStartMins = (startH ?? 0) * 60 + (startM ?? 0);
+                const isUpcoming = nowMins < taskStartMins;
+
+                return (
+                  <div key={n.id} className={`${styles.item} ${styles[n.status]}`}>
+                    <div className={styles.itemHeader}>
+                      <h5 className={styles.itemTitle}>{n.title}</h5>
+                      {n.status === "pending" && !runningSlot && (
+                        <button
+                          type="button"
+                          className={styles.actionBtn + " " + styles.dismiss}
+                          onClick={() => handleDismiss(n)}
+                          disabled={notificationAction.isPending}
+                          title="Dismiss"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className={styles.itemMeta}>
+                      <span className={styles.metaSpan}>
+                        <Clock size={11} />
+                        {formatTimeOfDay(n.startTime)}
+                      </span>
+                      <span>{n.durationMinutes}m planned</span>
+                    </div>
+
+                    {n.status === "pending" ? (
+                      runningSlot ? (
+                        <div className={`${styles.statusBadge} ${styles.running}`}>
+                          <Loader2 size={11} className="animate-spin" />
+                          Running in Timer {runningSlot}
+                        </div>
+                      ) : isUpcoming ? (
+                        <div className={`${styles.statusBadge} ${styles.upcoming}`}>
+                          <Clock size={11} />
+                          Upcoming at {formatTimeOfDay(n.startTime)}
+                        </div>
+                      ) : (
+                        <div className={styles.actions}>
+                          <span className={styles.confirmPrompt}>Followed routine?</span>
+                          <button
+                            type="button"
+                            className={`${styles.actionBtn} ${styles.approve}`}
+                            onClick={() => handleApprove(n)}
+                            disabled={notificationAction.isPending}
+                            title="Yes, count scheduled duration"
+                          >
+                            {notificationAction.isPending ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                            Yes (+{n.durationMinutes}m)
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.actionBtn} ${styles.reject}`}
+                            onClick={() => handleReject(n)}
+                            disabled={notificationAction.isPending}
+                            title="No, mark not followed (0m)"
+                          >
+                            <X size={11} />
+                            No (0m)
+                          </button>
+                        </div>
+                      )
+                    ) : (
+                      <div className={`${styles.statusBadge} ${styles[n.status]}`}>
+                        {n.status === "approved" && (
+                          <>
+                            <Check size={11} />
+                            Completed (+{n.durationMinutes}m tracked)
+                          </>
+                        )}
+                        {n.status === "rejected" && (
+                          <>
+                            <X size={11} />
+                            Not followed (0m tracked)
+                          </>
+                        )}
+                        {n.status === "cancelled" && <>Cancelled for today</>}
+                        {n.status === "dismissed" && <>Dismissed</>}
+                      </div>
                     )}
                   </div>
-
-                  <div className={styles.itemMeta}>
-                    <span className={styles.metaSpan}>
-                      <Clock size={11} />
-                      {formatTimeOfDay(n.startTime)}
-                    </span>
-                    <span>{n.durationMinutes}m planned</span>
-                  </div>
-
-                  {n.status === "pending" ? (
-                    <div className={styles.actions}>
-                      <button
-                        type="button"
-                        className={`${styles.actionBtn} ${styles.start}`}
-                        onClick={() => handleStart(n)}
-                        disabled={!availableSlot}
-                        title={
-                          availableSlot
-                            ? `Start in Slot ${availableSlot}`
-                            : "Both timer slots are full"
-                        }
-                      >
-                        <Play size={10} fill="currentColor" />
-                        Start Timer
-                      </button>
-                      <button
-                        type="button"
-                        className={`${styles.actionBtn} ${styles.approve}`}
-                        onClick={() => handleApprove(n)}
-                        title="Count scheduled duration in today's time"
-                      >
-                        <Check size={11} />
-                        I did this
-                      </button>
-                      <button
-                        type="button"
-                        className={`${styles.actionBtn} ${styles.reject}`}
-                        onClick={() => handleReject(n)}
-                        title="Mark as not followed (0m)"
-                      >
-                        <X size={11} />
-                        Did not do
-                      </button>
-                    </div>
-                  ) : (
-                    <div className={`${styles.statusBadge} ${styles[n.status]}`}>
-                      {n.status === "approved" && (
-                        <>
-                          <Check size={11} />
-                          Completed (+{n.durationMinutes}m tracked)
-                        </>
-                      )}
-                      {n.status === "rejected" && (
-                        <>
-                          <X size={11} />
-                          Not followed (0m tracked)
-                        </>
-                      )}
-                      {n.status === "dismissed" && <>Dismissed</>}
-                    </div>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

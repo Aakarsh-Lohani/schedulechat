@@ -24,6 +24,7 @@ export async function POST(req: Request, { params: paramsPromise }: { params: Pr
 
   const body = await req.json().catch(() => ({}));
   const isFollowed = body?.followed !== false && !body?.discardTime;
+  const isAutoStopped = Boolean(body?.autoStopped);
 
   const now = new Date();
   let pausedDeduction = session.totalPausedSeconds ?? 0;
@@ -32,9 +33,10 @@ export async function POST(req: Request, { params: paramsPromise }: { params: Pr
   }
 
   const rawElapsedSeconds = (now.getTime() - session.startedAt.getTime()) / 1000;
+  const maxAllowedDuration = session.plannedDurationSeconds + session.extendedBySeconds;
   const calculatedContributed =
     session.status === "running" || session.status === "paused"
-      ? Math.max(0, Math.round(rawElapsedSeconds - COUNTDOWN_SECONDS - pausedDeduction))
+      ? Math.min(maxAllowedDuration, Math.max(0, Math.round(rawElapsedSeconds - COUNTDOWN_SECONDS - pausedDeduction)))
       : 0;
   const contributedSeconds = isFollowed ? calculatedContributed : 0;
 
@@ -43,11 +45,39 @@ export async function POST(req: Request, { params: paramsPromise }: { params: Pr
   session.contributedSeconds = contributedSeconds;
   await session.save();
 
-  if (contributedSeconds > 0) {
+  if (contributedSeconds > 0 && session.taskId) {
     await Task.findOneAndUpdate({ _id: session.taskId, userId }, { $inc: { totalTrackedSeconds: contributedSeconds } });
-  } else if (!isFollowed) {
+  } else if (!isFollowed && session.taskId) {
     // If marked as not followed, revert task to not-started
     await Task.findOneAndUpdate({ _id: session.taskId, userId }, { $set: { status: "not-started" } });
+  }
+
+  // Sync with scheduled task notification for today
+  if (session.scheduledTaskId) {
+    const { Notification } = await import("@/lib/db/models/Notification");
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const matchingNotif = await Notification.findOne({
+      userId,
+      scheduledTaskId: session.scheduledTaskId,
+      createdAt: { $gte: oneDayAgo },
+    }).sort({ createdAt: -1 });
+
+    if (matchingNotif) {
+      if (!isFollowed) {
+        // Discarded / not followed: mark notification rejected
+        matchingNotif.status = "rejected";
+        matchingNotif.timerSessionId = session._id as any;
+      } else if (!isAutoStopped) {
+        // Manually stopped by user: user was present and interacted, mark approved automatically
+        matchingNotif.status = "approved";
+        matchingNotif.timerSessionId = session._id as any;
+      } else {
+        // Auto-stopped: link session, leave pending so user can confirm if needed
+        matchingNotif.timerSessionId = session._id as any;
+      }
+      await matchingNotif.save();
+    }
+    emit(userId, { type: "notifications-updated" });
   }
 
   emit(userId, { type: "timer-changed" });

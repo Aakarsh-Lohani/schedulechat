@@ -34,21 +34,35 @@ export async function POST(req: Request) {
     plannedDurationSeconds = scheduledTask.durationMinutes * 60;
   }
 
-  const slotBusy = await TimerSession.findOne({ userId, slot, status: { $in: ["countdown", "running", "paused"] } });
-  if (slotBusy) {
-    return NextResponse.json({ error: `Timer slot ${slot} is already in use`, code: "SLOT_BUSY" }, { status: 409 });
-  }
-
+  // Check if this task is already active anywhere
   const taskActiveFilter = taskId
     ? { userId, taskId, status: { $in: ["countdown", "running", "paused"] } }
     : { userId, scheduledTaskId, status: { $in: ["countdown", "running", "paused"] } };
 
   const taskActiveElsewhere = await TimerSession.findOne(taskActiveFilter);
   if (taskActiveElsewhere) {
+    // If it's a scheduled task or regular task already running/starting, return existing session idempotently
     return NextResponse.json(
-      { error: "This task already has an active timer in the other slot", code: "TASK_ALREADY_ACTIVE" },
-      { status: 409 }
+      { session: serializeSession(taskActiveElsewhere.toObject()) },
+      { status: 200 }
     );
+  }
+
+  let targetSlot = slot;
+  let slotBusy = await TimerSession.findOne({ userId, slot: targetSlot, status: { $in: ["countdown", "running", "paused"] } });
+
+  // If scheduled task and requested slot is busy, try the other slot automatically
+  if (slotBusy && scheduledTaskId) {
+    const alternateSlot: 1 | 2 = targetSlot === 1 ? 2 : 1;
+    const alternateBusy = await TimerSession.findOne({ userId, slot: alternateSlot, status: { $in: ["countdown", "running", "paused"] } });
+    if (!alternateBusy) {
+      targetSlot = alternateSlot;
+      slotBusy = null;
+    }
+  }
+
+  if (slotBusy) {
+    return NextResponse.json({ error: `Timer slot ${targetSlot} is already in use`, code: "SLOT_BUSY" }, { status: 409 });
   }
 
   const now = new Date();
@@ -56,12 +70,29 @@ export async function POST(req: Request) {
     userId,
     taskId: taskId ?? null,
     scheduledTaskId: scheduledTaskId ?? null,
-    slot,
+    slot: targetSlot,
     startedAt: now,
     countdownEndsAt: new Date(now.getTime() + COUNTDOWN_SECONDS * 1000),
     plannedDurationSeconds,
     status: "countdown",
   });
+
+  // Link to today's notification if starting a scheduled task
+  if (scheduledTaskId) {
+    const { Notification } = await import("@/lib/db/models/Notification");
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const matchingNotif = await Notification.findOne({
+      userId,
+      scheduledTaskId,
+      createdAt: { $gte: oneDayAgo },
+    }).sort({ createdAt: -1 });
+
+    if (matchingNotif) {
+      matchingNotif.timerSessionId = session._id as any;
+      await matchingNotif.save();
+    }
+    emit(userId, { type: "notifications-updated" });
+  }
 
   // Automatically update regular task status to active (in-progress) when timer starts
   if (task && task.status === "not-started") {

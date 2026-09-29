@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Bell, Clock, Play, X } from "lucide-react";
 import { formatTimeOfDay } from "@/lib/calendar/recurrence";
 import styles from "./AlarmDialog.module.scss";
@@ -13,12 +13,17 @@ export interface AlarmItem {
   durationMinutes: number;
   type: "reminder" | "alarm"; // reminder = 10m before, alarm = starting now
   taskId?: string; // ID of materialized task if available
+  notificationId?: string;
 }
 
 interface AlarmDialogProps {
   item: AlarmItem;
-  onStartInSlot: (slot: 1 | 2, item: AlarmItem) => void;
+  slot1Busy?: boolean;
+  slot2Busy?: boolean;
+  onStartInSlot: (slot: 1 | 2, item: AlarmItem) => Promise<void> | void;
+  onStartAtScheduledTime: (slot: 1 | 2, item: AlarmItem) => Promise<void> | void;
   onSnooze: (item: AlarmItem) => void;
+  onCancelToday: (item: AlarmItem) => Promise<void> | void;
   onDismiss: (item: AlarmItem) => void;
 }
 
@@ -82,15 +87,37 @@ function playAudioChime(type: "reminder" | "alarm") {
   }
 }
 
-export function AlarmDialog({ item, onStartInSlot, onSnooze, onDismiss }: AlarmDialogProps) {
+export function AlarmDialog({
+  item,
+  slot1Busy = false,
+  slot2Busy = false,
+  onStartInSlot,
+  onStartAtScheduledTime,
+  onSnooze,
+  onCancelToday,
+  onDismiss,
+}: AlarmDialogProps) {
+  const [isPending, setIsPending] = useState(false);
+
   useEffect(() => {
     playAudioChime(item.type);
   }, [item.id, item.type]);
 
   const isAlarm = item.type === "alarm";
+  const defaultSlot: 1 | 2 = !slot1Busy ? 1 : 2;
+
+  const handleAction = async (fn: () => Promise<void> | void) => {
+    if (isPending) return;
+    setIsPending(true);
+    try {
+      await fn();
+    } finally {
+      setIsPending(false);
+    }
+  };
 
   return (
-    <div className={styles.overlay} onClick={() => onDismiss(item)}>
+    <div className={styles.overlay} onClick={() => !isPending && onDismiss(item)}>
       <div
         className={`${styles.dialog} ${isAlarm ? styles.alarm : styles.reminder}`}
         onClick={(e) => e.stopPropagation()}
@@ -104,6 +131,7 @@ export function AlarmDialog({ item, onStartInSlot, onSnooze, onDismiss }: AlarmD
             type="button"
             className={styles.closeBtn}
             onClick={() => onDismiss(item)}
+            disabled={isPending}
             title="Dismiss alert"
           >
             <X size={15} />
@@ -124,39 +152,61 @@ export function AlarmDialog({ item, onStartInSlot, onSnooze, onDismiss }: AlarmD
         </div>
 
         <div className={styles.actions}>
+          {/* Action 1: Start Now in Slot 1 or Slot 2 */}
           <div className={styles.slotButtons}>
             <button
               type="button"
               className={styles.slotBtn}
-              onClick={() => onStartInSlot(1, item)}
+              onClick={() => handleAction(() => onStartInSlot(1, item))}
+              disabled={isPending || slot1Busy}
+              title={slot1Busy ? "Slot 1 is in use" : "Start now in Slot 1"}
             >
               <Play size={12} fill="currentColor" />
-              Start in Slot 1
+              {slot1Busy ? "Slot 1 (In Use)" : "Start Now (Slot 1)"}
             </button>
             <button
               type="button"
               className={styles.slotBtn}
-              onClick={() => onStartInSlot(2, item)}
+              onClick={() => handleAction(() => onStartInSlot(2, item))}
+              disabled={isPending || slot2Busy}
+              title={slot2Busy ? "Slot 2 is in use" : "Start now in Slot 2"}
             >
               <Play size={12} fill="currentColor" />
-              Start in Slot 2
+              {slot2Busy ? "Slot 2 (In Use)" : "Start Now (Slot 2)"}
             </button>
           </div>
 
+          {/* Action 2: Start at Scheduled Time */}
+          <button
+            type="button"
+            className={styles.scheduledBtn}
+            onClick={() => handleAction(() => onStartAtScheduledTime(defaultSlot, item))}
+            disabled={isPending}
+            title={`Auto-start at ${item.startTime}`}
+          >
+            <Clock size={12} />
+            Start at Scheduled Time ({item.startTime})
+          </button>
+
+          {/* Action 3 & 4: Snooze 5 mins / Cancel Event for Today */}
           <div className={styles.subActions}>
             <button
               type="button"
               className={styles.snoozeBtn}
-              onClick={() => onSnooze(item)}
+              onClick={() => handleAction(() => onSnooze(item))}
+              disabled={isPending}
+              title="Remind again in 5 minutes"
             >
-              Snooze 5 mins
+              Snooze 5m
             </button>
             <button
               type="button"
-              className={styles.dismissBtn}
-              onClick={() => onDismiss(item)}
+              className={styles.cancelBtn}
+              onClick={() => handleAction(() => onCancelToday(item))}
+              disabled={isPending}
+              title="Cancel this routine for today"
             >
-              Dismiss
+              Cancel Event for Today
             </button>
           </div>
         </div>

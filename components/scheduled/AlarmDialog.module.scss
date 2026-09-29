@@ -1,4 +1,4 @@
-﻿@use "../../styles/tokens" as t;
+@use "../../styles/tokens" as t;
 
 .overlay {
   position: fixed;
@@ -146,10 +146,43 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, background-color 0.15s;
 
-  &:hover {
+  &:hover:not(:disabled) {
     opacity: 0.9;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: t.$border-subtle;
+    color: t.$text-muted;
+  }
+}
+
+.scheduledBtn {
+  background: rgba(90, 169, 247, 0.15);
+  border: 1px solid rgba(90, 169, 247, 0.4);
+  color: t.$accent-timer;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s;
+
+  &:hover:not(:disabled) {
+    background: rgba(90, 169, 247, 0.25);
+    border-color: t.$accent-timer;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 
@@ -160,7 +193,7 @@
   margin-top: 4px;
 }
 
-.snoozeBtn, .dismissBtn {
+.snoozeBtn, .cancelBtn, .dismissBtn {
   background: none;
   border: 1px solid t.$border-subtle;
   color: t.$text-muted;
@@ -170,9 +203,30 @@
   font-weight: 600;
   cursor: pointer;
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all 0.15s;
 
-  &:hover {
+  &:hover:not(:disabled) {
     color: t.$text-primary;
     border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.cancelBtn {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: rgba(239, 68, 68, 0.85);
+
+  &:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: #ef4444;
+    color: #ef4444;
   }
 }

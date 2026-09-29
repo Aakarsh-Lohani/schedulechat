@@ -3,7 +3,10 @@ import { connectDB } from "@/lib/db/connect";
 import { getCurrentUserId } from "@/lib/session";
 import { Notification } from "@/lib/db/models/Notification";
 import { ScheduledTask } from "@/lib/db/models/ScheduledTask";
+import { TimerSession } from "@/lib/db/models/TimerSession";
 import { doesRRuleOccurOnDate } from "@/lib/calendar/recurrence";
+import { emit } from "@/lib/realtime/emitter";
+import { objectIdString } from "@/lib/validation/schemas";
 
 export async function GET(req: Request) {
   const userId = await getCurrentUserId();
@@ -84,4 +87,56 @@ export async function GET(req: Request) {
       createdAt: n.createdAt,
     })),
   });
+}
+
+export async function POST(req: Request) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
+
+  const body = await req.json().catch(() => null);
+  const { scheduledTaskId, action, date } = body || {};
+
+  if (!scheduledTaskId || action !== "cancel" || !objectIdString.safeParse(scheduledTaskId).success) {
+    return NextResponse.json({ error: "Invalid request", code: "VALIDATION_ERROR" }, { status: 400 });
+  }
+
+  await connectDB();
+  const st = await ScheduledTask.findOne({ _id: scheduledTaskId, userId });
+  if (!st) return NextResponse.json({ error: "Scheduled task not found", code: "NOT_FOUND" }, { status: 404 });
+
+  const targetDate = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? date
+    : new Date().toISOString().slice(0, 10);
+
+  const notif = await Notification.findOneAndUpdate(
+    { userId, scheduledTaskId: st._id, date: targetDate },
+    {
+      $set: {
+        title: st.title,
+        description: st.description || "",
+        startTime: st.startTime,
+        durationMinutes: st.durationMinutes,
+        status: "cancelled",
+      },
+    },
+    { upsert: true, new: true }
+  );
+
+  // If an active session is currently running for this scheduled task, cancel it
+  const activeSession = await TimerSession.findOne({
+    userId,
+    scheduledTaskId: st._id,
+    status: { $in: ["countdown", "running", "paused"] },
+  });
+  if (activeSession) {
+    activeSession.status = "cancelled";
+    activeSession.contributedSeconds = 0;
+    activeSession.actualEndedAt = new Date();
+    await activeSession.save();
+    emit(userId, { type: "timer-changed" });
+  }
+
+  emit(userId, { type: "notifications-updated" });
+
+  return NextResponse.json({ ok: true, status: "cancelled", notification: notif });
 }
