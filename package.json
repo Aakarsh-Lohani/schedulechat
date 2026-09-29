@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "script:clean-timers": "tsx scripts/clean-timer-pollution.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

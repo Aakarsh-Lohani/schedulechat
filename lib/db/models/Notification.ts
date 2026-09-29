@@ -11,7 +11,7 @@ const NotificationSchema = new Schema(
     durationMinutes: { type: Number, required: true, default: 30 },
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected", "dismissed"],
+      enum: ["pending", "approved", "rejected", "dismissed", "cancelled"],
       default: "pending",
       index: true,
     },

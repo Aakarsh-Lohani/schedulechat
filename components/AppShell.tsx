@@ -42,7 +42,16 @@ export function AppShell() {
   const { view, setView, chatPanelOpen } = useUIStore();
   const updateTask = useUpdateTask();
   const startTimer = useStartTimer();
-  const { activeAlarm, handleStartInSlot, handleSnooze, handleDismiss } = useScheduledTaskAlarms();
+  const {
+    activeAlarm,
+    slot1Busy,
+    slot2Busy,
+    handleStartInSlot,
+    handleStartAtScheduledTime,
+    handleSnooze,
+    handleCancelToday,
+    handleDismiss,
+  } = useScheduledTaskAlarms();
 
   const mouseSensor = useSensor(MouseSensor, {
     activationConstraint: {
@@ -106,8 +115,12 @@ export function AppShell() {
         {activeAlarm && (
           <AlarmDialog
             item={activeAlarm}
+            slot1Busy={slot1Busy}
+            slot2Busy={slot2Busy}
             onStartInSlot={handleStartInSlot}
+            onStartAtScheduledTime={handleStartAtScheduledTime}
             onSnooze={handleSnooze}
+            onCancelToday={handleCancelToday}
             onDismiss={handleDismiss}
           />
         )}

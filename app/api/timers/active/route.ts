@@ -4,6 +4,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { TimerSession } from "@/lib/db/models/TimerSession";
 import { Task } from "@/lib/db/models/Task";
 import { ScheduledTask } from "@/lib/db/models/ScheduledTask";
+import { COUNTDOWN_SECONDS } from "@/lib/timers/constants";
 
 /**
  * Returns both timer slots' current session (if any) plus a derived "today total"
@@ -59,10 +60,42 @@ export async function GET() {
     const populatedScheduledTask = s.scheduledTaskId as unknown as { _id: unknown; title?: string } | null;
     const taskTitle = populatedTask?.title ?? populatedScheduledTask?.title ?? "Scheduled Task";
     const isScheduledTask = Boolean(s.scheduledTaskId || populatedTask?.scheduledTaskId);
+    const plannedTotalSeconds = s.plannedDurationSeconds + s.extendedBySeconds;
+
+    // For scheduled tasks, auto-complete if planned duration expired while client was offline/away
+    if (isScheduledTask && (s.status === "running" || s.status === "paused")) {
+      const totalPaused = s.totalPausedSeconds ?? 0;
+      const currentPause =
+        s.status === "paused" && s.pausedAt
+          ? Math.max(0, (nowMs - new Date(s.pausedAt).getTime()) / 1000)
+          : 0;
+      const workElapsedSeconds = (nowMs - startedAtMs) / 1000 - COUNTDOWN_SECONDS - totalPaused - currentPause;
+
+      if (workElapsedSeconds >= plannedTotalSeconds) {
+        await TimerSession.updateOne(
+          { _id: s._id },
+          {
+            status: "completed",
+            actualEndedAt: new Date(startedAtMs + (COUNTDOWN_SECONDS + plannedTotalSeconds + totalPaused) * 1000),
+            contributedSeconds: plannedTotalSeconds,
+          }
+        );
+        if (s.scheduledTaskId) {
+          const oneDayAgo = new Date(nowMs - 24 * 60 * 60 * 1000);
+          const { Notification } = await import("@/lib/db/models/Notification");
+          await Notification.updateOne(
+            { userId, scheduledTaskId: s.scheduledTaskId, createdAt: { $gte: oneDayAgo }, timerSessionId: null },
+            { $set: { timerSessionId: s._id } }
+          );
+        }
+        continue;
+      }
+    }
 
     slots[slotNum] = {
       id: String(s._id),
       taskId: String(populatedTask?._id ?? s.taskId ?? populatedScheduledTask?._id ?? s.scheduledTaskId ?? ""),
+      scheduledTaskId: s.scheduledTaskId ? String(populatedScheduledTask?._id ?? s.scheduledTaskId) : undefined,
       taskTitle,
       isScheduledTask,
       status: s.status,

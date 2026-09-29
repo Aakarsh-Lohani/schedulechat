@@ -216,6 +216,12 @@
   }
 }
 
+.confirmPrompt {
+  font-size: 11px;
+  color: t.$text-muted;
+  margin-right: 2px;
+}
+
 .statusBadge {
   display: inline-flex;
   align-items: center;
@@ -237,8 +243,23 @@
     color: #f87171;
   }
 
+  &.cancelled {
+    background: rgba(239, 68, 68, 0.08);
+    color: t.$text-muted;
+  }
+
   &.dismissed {
     background: rgba(255, 255, 255, 0.05);
+    color: t.$text-muted;
+  }
+
+  &.running {
+    background: rgba(99, 102, 241, 0.15);
+    color: t.$accent-ai;
+  }
+
+  &.upcoming {
+    background: rgba(255, 255, 255, 0.06);
     color: t.$text-muted;
   }
 }

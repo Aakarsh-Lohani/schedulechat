@@ -229,15 +229,19 @@ export function useResumeTimer() {
 export function useStopTimer() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (arg: string | { id: string; followed?: boolean; discardTime?: boolean }) => {
+    mutationFn: (arg: string | { id: string; followed?: boolean; discardTime?: boolean; autoStopped?: boolean }) => {
       const id = typeof arg === "string" ? arg : arg.id;
-      const body = typeof arg === "object" ? JSON.stringify({ followed: arg.followed, discardTime: arg.discardTime }) : undefined;
+      const body =
+        typeof arg === "object"
+          ? JSON.stringify({ followed: arg.followed, discardTime: arg.discardTime, autoStopped: arg.autoStopped })
+          : undefined;
       return apiFetch(`/api/timers/${id}/stop`, { method: "POST", body });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["timers", "active"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }
@@ -455,7 +459,7 @@ export interface NotificationDTO {
   date: string;
   startTime: string;
   durationMinutes: number;
-  status: "pending" | "approved" | "rejected" | "dismissed";
+  status: "pending" | "approved" | "rejected" | "dismissed" | "cancelled";
   timerSessionId?: string | null;
   createdAt: string;
 }
@@ -478,7 +482,7 @@ export function useNotificationAction() {
       slot,
     }: {
       id: string;
-      action: "approve" | "reject" | "start" | "dismiss";
+      action: "approve" | "reject" | "start" | "dismiss" | "cancel";
       slot?: 1 | 2;
     }) =>
       apiFetch<{ ok: boolean; status?: string }>(`/api/notifications/${id}/action`, {
