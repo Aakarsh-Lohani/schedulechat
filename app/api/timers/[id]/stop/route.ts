@@ -33,10 +33,19 @@ export async function POST(req: Request, { params: paramsPromise }: { params: Pr
   }
 
   const rawElapsedSeconds = (now.getTime() - session.startedAt.getTime()) / 1000;
+  let isScheduledTask = Boolean(session.scheduledTaskId);
+  if (!isScheduledTask && session.taskId) {
+    const associatedTask = await Task.findById(session.taskId).select("scheduledTaskId").lean();
+    if (associatedTask?.scheduledTaskId) {
+      isScheduledTask = true;
+    }
+  }
+
+  const elapsedWorkSeconds = Math.max(0, Math.round(rawElapsedSeconds - COUNTDOWN_SECONDS - pausedDeduction));
   const maxAllowedDuration = session.plannedDurationSeconds + session.extendedBySeconds;
   const calculatedContributed =
     session.status === "running" || session.status === "paused"
-      ? Math.min(maxAllowedDuration, Math.max(0, Math.round(rawElapsedSeconds - COUNTDOWN_SECONDS - pausedDeduction)))
+      ? (isScheduledTask ? Math.min(maxAllowedDuration, elapsedWorkSeconds) : elapsedWorkSeconds)
       : 0;
   const contributedSeconds = isFollowed ? calculatedContributed : 0;
 

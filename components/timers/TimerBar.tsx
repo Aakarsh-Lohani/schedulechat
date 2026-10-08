@@ -220,17 +220,16 @@ export function TimerBar() {
             ? Math.max(0, (now - new Date(s.pausedAt).getTime()) / 1000)
             : 0;
 
-        // Total live elapsed across whole session, capped by planned duration + extensions
-        const totalElapsed = Math.min(
-          maxDurationSeconds,
-          Math.max(0, (now - startedAtMs) / 1000 - COUNTDOWN_SECONDS - totalPaused - currentPause)
-        );
+        const isScheduled = s.isScheduledTask;
+        const elapsedWork = Math.max(0, (now - startedAtMs) / 1000 - COUNTDOWN_SECONDS - totalPaused - currentPause);
+
+        // Total live elapsed across whole session, capped by planned duration only for scheduled tasks
+        const totalElapsed = isScheduled ? Math.min(maxDurationSeconds, elapsedWork) : elapsedWork;
         liveSecondsTotal += totalElapsed;
 
         // Compute overlap of timer's work window with today
         const workStartMs = startedAtMs + COUNTDOWN_SECONDS * 1000;
-        const expectedEndMs = workStartMs + maxDurationSeconds * 1000;
-        const actualEndMs = Math.min(now, expectedEndMs);
+        const actualEndMs = isScheduled ? Math.min(now, workStartMs + maxDurationSeconds * 1000) : now;
         const overlapStartMs = Math.max(workStartMs, todayMidnightMs);
         const overlapMs = Math.max(0, actualEndMs - overlapStartMs - (totalPaused + currentPause) * 1000);
         liveSecondsToday += overlapMs / 1000;

@@ -7,12 +7,15 @@ export function computeOverlapSeconds(
   endedAt: Date | null,
   plannedSec: number,
   windowStart: Date,
-  windowEnd: Date
+  windowEnd: Date,
+  isScheduled = false
 ): number {
   const sStart = startedAt.getTime();
   const effectiveEnd = endedAt
     ? endedAt.getTime()
-    : Math.min(Date.now(), sStart + plannedSec * 1000);
+    : isScheduled
+    ? Math.min(Date.now(), sStart + plannedSec * 1000)
+    : Date.now();
 
   const overlapStart = Math.max(sStart, windowStart.getTime());
   const overlapEnd = Math.min(effectiveEnd, windowEnd.getTime());
