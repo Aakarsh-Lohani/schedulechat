@@ -65,6 +65,7 @@ export function calculateTodayBoundedSeconds(
     startedAt: string | number | Date;
     plannedDurationSeconds: number;
     extendedBySeconds: number;
+    isScheduledTask?: boolean;
   }>,
   nowMs: number,
   todayMidnightMs: number,
@@ -78,8 +79,9 @@ export function calculateTodayBoundedSeconds(
 
     // The timer's effective work window starts after the countdown
     const workStartMs = startedAtMs + countdownSeconds * 1000;
-    // The timer's expected end time (or now if still running)
-    const expectedEndMs = workStartMs + maxDuration * 1000;
+    // For scheduled tasks (or default), cap at planned duration. For regular tasks (isScheduledTask === false), active until nowMs.
+    const isScheduled = s.isScheduledTask !== false;
+    const expectedEndMs = isScheduled ? workStartMs + maxDuration * 1000 : nowMs;
     const actualEndMs = Math.min(nowMs, expectedEndMs);
 
     // Compute overlap of [workStartMs, actualEndMs] with [todayMidnightMs, now]

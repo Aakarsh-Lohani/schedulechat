@@ -77,6 +77,7 @@ export async function GET(req: Request) {
 
   for (const s of validSessions) {
     const started = new Date(s.startedAt);
+    const isScheduled = Boolean(s.scheduledTaskId);
     const ended = s.actualEndedAt
       ? new Date(s.actualEndedAt)
       : s.status === "completed"
@@ -84,13 +85,13 @@ export async function GET(req: Request) {
       : null;
     const planned = s.plannedDurationSeconds;
 
-    const tOverlap = computeOverlapSeconds(started, ended, planned, startOfToday, endOfToday);
+    const tOverlap = computeOverlapSeconds(started, ended, planned, startOfToday, endOfToday, isScheduled);
     todaySeconds += tOverlap;
 
-    const wOverlap = computeOverlapSeconds(started, ended, planned, startOfWeek, endOfWeek);
+    const wOverlap = computeOverlapSeconds(started, ended, planned, startOfWeek, endOfWeek, isScheduled);
     thisWeekSeconds += wOverlap;
 
-    const mOverlap = computeOverlapSeconds(started, ended, planned, startOfMonth, endOfMonth);
+    const mOverlap = computeOverlapSeconds(started, ended, planned, startOfMonth, endOfMonth, isScheduled);
     thisMonthSeconds += mOverlap;
 
     if (s.status === "completed") {
@@ -98,7 +99,7 @@ export async function GET(req: Request) {
     } else {
       // currently running live seconds
       const live = Math.max(0, Math.floor((Date.now() - started.getTime()) / 1000));
-      allTimeSeconds += Math.min(planned, live);
+      allTimeSeconds += isScheduled ? Math.min(planned, live) : live;
     }
   }
 
@@ -111,13 +112,14 @@ export async function GET(req: Request) {
 
       let dayActualSec = 0;
       for (const s of validSessions) {
+        const isScheduled = Boolean(s.scheduledTaskId);
         const started = new Date(s.startedAt);
         const ended = s.actualEndedAt
           ? new Date(s.actualEndedAt)
           : s.status === "completed"
           ? new Date(started.getTime() + (s.contributedSeconds || s.plannedDurationSeconds) * 1000)
           : null;
-        dayActualSec += computeOverlapSeconds(started, ended, s.plannedDurationSeconds, dayStart, dayEnd);
+        dayActualSec += computeOverlapSeconds(started, ended, s.plannedDurationSeconds, dayStart, dayEnd, isScheduled);
       }
 
       // Planned time: tasks scheduled for that day

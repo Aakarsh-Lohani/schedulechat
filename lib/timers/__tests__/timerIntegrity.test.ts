@@ -13,6 +13,7 @@ function calculateContributedSeconds({
   pausedAt = null,
   status = "running",
   isFollowed = true,
+  isScheduledTask = false,
 }: {
   startedAt: Date;
   now: Date;
@@ -22,6 +23,7 @@ function calculateContributedSeconds({
   pausedAt?: Date | null;
   status?: "running" | "paused" | "countdown";
   isFollowed?: boolean;
+  isScheduledTask?: boolean;
 }): { contributedSeconds: number; status: "completed" | "cancelled" } {
   if (!isFollowed) {
     return { contributedSeconds: 0, status: "cancelled" };
@@ -33,13 +35,11 @@ function calculateContributedSeconds({
   }
 
   const rawElapsedSeconds = (now.getTime() - startedAt.getTime()) / 1000;
+  const elapsedWorkSeconds = Math.max(0, Math.round(rawElapsedSeconds - COUNTDOWN_SECONDS - pausedDeduction));
   const maxAllowedDuration = plannedDurationSeconds + extendedBySeconds;
   const calculatedContributed =
     status === "running" || status === "paused"
-      ? Math.min(
-          maxAllowedDuration,
-          Math.max(0, Math.round(rawElapsedSeconds - COUNTDOWN_SECONDS - pausedDeduction))
-        )
+      ? (isScheduledTask ? Math.min(maxAllowedDuration, elapsedWorkSeconds) : elapsedWorkSeconds)
       : 0;
 
   return {
@@ -59,7 +59,7 @@ function getTimingDiffSecs(taskStartSecs: number, nowSecs: number): number {
 }
 
 describe("Timer Integrity & Time-Counting Rules", () => {
-  it("caps contributedSeconds to plannedDuration on auto-stop even if stopped late", () => {
+  it("caps contributedSeconds to plannedDuration for scheduled tasks on auto-stop even if stopped late", () => {
     const plannedDurationSeconds = 1800; // 30 minutes
     const startedAt = new Date("2026-09-29T10:00:00Z");
     // Suppose browser was closed or delayed and stop fires 45 minutes later (2700s)
@@ -71,9 +71,29 @@ describe("Timer Integrity & Time-Counting Rules", () => {
       plannedDurationSeconds,
       status: "running",
       isFollowed: true,
+      isScheduledTask: true,
     });
 
     expect(result.contributedSeconds).toBe(1800); // strictly capped to planned
+    expect(result.status).toBe("completed");
+  });
+
+  it("records full actual elapsed time including extra time for regular tasks (e.g. 160 minutes on 30 min timer)", () => {
+    const plannedDurationSeconds = 1800; // 30 minutes default timer
+    const startedAt = new Date("2026-10-07T10:00:00Z");
+    // User worked 160 minutes (9600s work + COUNTDOWN_SECONDS)
+    const now = new Date(startedAt.getTime() + (160 * 60 + COUNTDOWN_SECONDS) * 1000);
+
+    const result = calculateContributedSeconds({
+      startedAt,
+      now,
+      plannedDurationSeconds,
+      status: "running",
+      isFollowed: true,
+      isScheduledTask: false,
+    });
+
+    expect(result.contributedSeconds).toBe(9600); // full 160 minutes recorded
     expect(result.status).toBe("completed");
   });
 

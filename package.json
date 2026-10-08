@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "seed": "tsx scripts/seed.ts",
-    "script:clean-timers": "tsx scripts/clean-timer-pollution.ts"
+    "script:clean-timers": "tsx scripts/clean-timer-pollution.ts",
+    "script:recover-task-time": "tsx scripts/recover-task-time.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
