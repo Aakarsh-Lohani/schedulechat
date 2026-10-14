@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api/fetcher";
+import { broadcastSyncEvent } from "@/lib/realtime/broadcast";
 import type { TabDTO, TaskDTO, ActiveTimersDTO, AIActionDTO, ChatReplyDTO, AnalyticsDataDTO, ConversationDTO, GoalContextDTO } from "@/lib/api/types";
 
 // ---- Models ----
@@ -59,7 +60,10 @@ export function useCreateTab() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (name: string) => apiFetch<{ tab: TabDTO }>("/api/tabs", { method: "POST", body: JSON.stringify({ name }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tabs"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tabs"] });
+      broadcastSyncEvent("tabs-updated");
+    },
   });
 }
 
@@ -70,6 +74,7 @@ export function useUpdateTab() {
       apiFetch<{ tab: TabDTO }>(`/api/tabs/${id}`, { method: "PATCH", body: JSON.stringify(fields) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tabs"] });
+      broadcastSyncEvent("tabs-updated");
     },
   });
 }
@@ -82,6 +87,7 @@ export function useDeleteTab() {
       qc.invalidateQueries({ queryKey: ["tabs"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+      broadcastSyncEvent("tabs-updated");
     },
   });
 }
@@ -135,6 +141,7 @@ export function useCreateTask() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+      broadcastSyncEvent("task-updated");
     },
   });
 }
@@ -147,6 +154,7 @@ export function useUpdateTask() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+      broadcastSyncEvent("task-updated");
     },
   });
 }
@@ -158,6 +166,7 @@ export function useDeleteTask() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+      broadcastSyncEvent("task-updated");
     },
   });
 }
@@ -168,7 +177,32 @@ export function useActiveTimers() {
   return useQuery({
     queryKey: ["timers", "active"],
     queryFn: () => apiFetch<ActiveTimersDTO>("/api/timers/active"),
-    refetchInterval: 5000,
+    refetchInterval: (query) => {
+      // 1. Never poll in background tab
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return false;
+      }
+      const data = query.state.data;
+      if (!data) return false;
+
+      const slots = [data.slots["1"], data.slots["2"]].filter(Boolean);
+      // 2. Idle (no active timers): do not poll. Wait for user action / window focus / broadcast
+      if (slots.length === 0) {
+        return false;
+      }
+
+      // 3. Starting soon (countdown): poll fast to sync start transition
+      const hasCountdown = slots.some((s) => s?.status === "countdown");
+      if (hasCountdown) {
+        return 3000;
+      }
+
+      // 4. Running/paused: local clock ticks via useNowTick(1000).
+      // Gentle 60s fallback safety check rather than 5s spam.
+      return 60000;
+    },
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -181,6 +215,7 @@ export function useStartTimer() {
       qc.invalidateQueries({ queryKey: ["timers", "active"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      broadcastSyncEvent("timer-changed");
     },
   });
 }
@@ -189,7 +224,10 @@ export function useConfirmStartTimer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiFetch(`/api/timers/${id}/confirm-start`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["timers", "active"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["timers", "active"] });
+      broadcastSyncEvent("timer-changed");
+    },
   });
 }
 
@@ -197,7 +235,10 @@ export function useCancelTimer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiFetch(`/api/timers/${id}/cancel`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["timers", "active"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["timers", "active"] });
+      broadcastSyncEvent("timer-changed");
+    },
   });
 }
 
@@ -206,7 +247,10 @@ export function useExtendTimer() {
   return useMutation({
     mutationFn: ({ id, seconds }: { id: string; seconds: number }) =>
       apiFetch(`/api/timers/${id}/extend`, { method: "POST", body: JSON.stringify({ seconds }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["timers", "active"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["timers", "active"] });
+      broadcastSyncEvent("timer-changed");
+    },
   });
 }
 
@@ -214,7 +258,10 @@ export function usePauseTimer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiFetch(`/api/timers/${id}/pause`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["timers", "active"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["timers", "active"] });
+      broadcastSyncEvent("timer-changed");
+    },
   });
 }
 
@@ -222,7 +269,10 @@ export function useResumeTimer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiFetch(`/api/timers/${id}/resume`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["timers", "active"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["timers", "active"] });
+      broadcastSyncEvent("timer-changed");
+    },
   });
 }
 
@@ -242,6 +292,7 @@ export function useStopTimer() {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      broadcastSyncEvent("timer-changed");
     },
   });
 }
@@ -264,6 +315,7 @@ export function useApproveAction() {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
       qc.invalidateQueries({ queryKey: ["tabs"] });
+      broadcastSyncEvent("ai-action-executed");
     },
   });
 }
@@ -272,7 +324,10 @@ export function useRejectAction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiFetch(`/api/ai-actions/${id}/reject`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-actions"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ai-actions"] });
+      broadcastSyncEvent("ai-action-executed");
+    },
   });
 }
 
@@ -285,6 +340,7 @@ export function useUndoAction() {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
       qc.invalidateQueries({ queryKey: ["tabs"] });
+      broadcastSyncEvent("ai-action-undone");
     },
   });
 }
@@ -407,6 +463,7 @@ export function useCreateScheduledTask() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scheduled-tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+      broadcastSyncEvent("task-updated");
     },
   });
 }
@@ -422,6 +479,7 @@ export function useUpdateScheduledTask() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scheduled-tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+      broadcastSyncEvent("task-updated");
     },
   });
 }
@@ -434,18 +492,22 @@ export function useDeleteScheduledTask() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scheduled-tasks"] });
       qc.invalidateQueries({ queryKey: ["calendar-tasks"] });
+      broadcastSyncEvent("task-updated");
     },
   });
 }
 
 // ---- Analytics ----
 
-export function useAnalytics(tzOffset?: number) {
+export function useAnalytics(tzOffset?: number, options?: { enabled?: boolean }) {
   const offset = tzOffset ?? new Date().getTimezoneOffset();
   return useQuery({
     queryKey: ["analytics", offset],
     queryFn: () => apiFetch<AnalyticsDataDTO>(`/api/analytics?tzOffset=${offset}`),
+    enabled: options?.enabled ?? true,
     refetchInterval: 60000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -469,7 +531,9 @@ export function useNotifications() {
   return useQuery({
     queryKey: ["notifications", tzOffset],
     queryFn: () => apiFetch<{ notifications: NotificationDTO[] }>(`/api/notifications?tzOffset=${tzOffset}`),
-    refetchInterval: 15000,
+    refetchInterval: 60000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -493,6 +557,7 @@ export function useNotificationAction() {
       qc.invalidateQueries({ queryKey: ["notifications"] });
       qc.invalidateQueries({ queryKey: ["timers", "active"] });
       qc.invalidateQueries({ queryKey: ["analytics"] });
+      broadcastSyncEvent("notifications-updated");
     },
   });
 }
