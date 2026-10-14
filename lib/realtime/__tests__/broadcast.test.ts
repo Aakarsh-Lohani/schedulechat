@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { broadcastSyncEvent, subscribeBroadcastSync } from "../broadcast";
 
 describe("BroadcastChannel Realtime Sync", () => {
   let listeners: Array<(event: MessageEvent) => void> = [];
   let postMessageMock: ReturnType<typeof vi.fn>;
+  let broadcastSyncEvent: typeof import("../broadcast").broadcastSyncEvent;
+  let subscribeBroadcastSync: typeof import("../broadcast").subscribeBroadcastSync;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Reset module singleton so each test gets a fresh channelInstance
+    vi.resetModules();
+
     listeners = [];
     postMessageMock = vi.fn((data: unknown) => {
       // Simulate dispatching to other subscribers
@@ -34,6 +38,11 @@ describe("BroadcastChannel Realtime Sync", () => {
     }
 
     vi.stubGlobal("BroadcastChannel", MockBroadcastChannel);
+
+    // Dynamic import after module reset so the singleton is freshly initialized
+    const mod = await import("../broadcast");
+    broadcastSyncEvent = mod.broadcastSyncEvent;
+    subscribeBroadcastSync = mod.subscribeBroadcastSync;
   });
 
   it("registers a subscriber and receives events from other sources", () => {

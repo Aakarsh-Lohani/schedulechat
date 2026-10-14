@@ -499,11 +499,12 @@ export function useDeleteScheduledTask() {
 
 // ---- Analytics ----
 
-export function useAnalytics(tzOffset?: number) {
+export function useAnalytics(tzOffset?: number, options?: { enabled?: boolean }) {
   const offset = tzOffset ?? new Date().getTimezoneOffset();
   return useQuery({
     queryKey: ["analytics", offset],
     queryFn: () => apiFetch<AnalyticsDataDTO>(`/api/analytics?tzOffset=${offset}`),
+    enabled: options?.enabled ?? true,
     refetchInterval: 60000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
