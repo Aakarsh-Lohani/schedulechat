@@ -24,7 +24,7 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
   }
 
   function commitEstimate(val: number) {
-    const clamped = Math.max(5, Math.min(1440, Math.round(val)));
+    const clamped = Math.max(1, Math.round(val));
     setEstMinutes(clamped);
     if (clamped !== task.estimateMinutes) {
       updateTask.mutate({ id: task.id, estimateMinutes: clamped });
@@ -32,7 +32,7 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
   }
 
   function handleAdjustEstimate(delta: number) {
-    const newVal = Math.max(5, Math.min(1440, (task.estimateMinutes || 30) + delta));
+    const newVal = Math.max(1, (task.estimateMinutes || 30) + delta);
     setEstMinutes(newVal);
     updateTask.mutate({ id: task.id, estimateMinutes: newVal });
   }
@@ -122,8 +122,7 @@ export function TaskCard({ task, onOpen }: { task: TaskDTO; onOpen: (task: TaskD
           </button>
           <input
             type="number"
-            min={5}
-            max={1440}
+            min={1}
             step={5}
             className={styles.estimateInput}
             value={estMinutes}

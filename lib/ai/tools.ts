@@ -111,7 +111,7 @@ const getGoalContextSchema = z.object({});
 const proposeCreateTaskSchema = z.object({
   tabName: z.string(),
   title: z.string(),
-  estimateMinutes: z.number().min(1).max(24 * 60).default(30),
+  estimateMinutes: z.number().min(1).default(30),
   defaultTimerMinutes: z.number().min(1).max(240).default(30),
   scheduleForToday: z.boolean().default(false),
   scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD format").optional(),
@@ -125,7 +125,7 @@ const proposeCreateTasksBatchSchema = z.object({
       z.object({
         tabName: z.string(),
         title: z.string(),
-        estimateMinutes: z.number().min(1).max(24 * 60).default(60),
+        estimateMinutes: z.number().min(1).default(60),
         defaultTimerMinutes: z.number().min(1).max(240).default(30),
         scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD format").optional(),
         description: z.string().optional(),
@@ -145,7 +145,7 @@ const proposeUpdateSprintLogSchema = z.object({
 const proposeUpdateTaskSchema = z.object({
   taskId: z.string(),
   title: z.string().optional(),
-  estimateMinutes: z.number().min(1).max(24 * 60).optional(),
+  estimateMinutes: z.number().min(1).optional(),
   progressPercent: z.number().min(0).max(100).optional(),
   status: z.enum(["not-started", "in-progress", "done", "archived"]).optional(),
 });
