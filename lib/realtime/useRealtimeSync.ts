@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { RealtimeEventType } from "@/lib/realtime/emitter";
+import { subscribeBroadcastSync } from "@/lib/realtime/broadcast";
 
 const EVENT_TO_QUERY_KEYS: Record<RealtimeEventType, string[][]> = {
   "task-updated": [["tasks"], ["calendar-tasks"]],
@@ -41,6 +42,16 @@ export function useRealtimeSync() {
     queryClientRef.current = queryClient;
   }, [queryClient]);
 
+  // 1. Instant cross-tab sync via local browser BroadcastChannel (0 server compute)
+  useEffect(() => {
+    const unsubscribeBroadcast = subscribeBroadcastSync((type) => {
+      const keys = EVENT_TO_QUERY_KEYS[type] ?? [];
+      keys.forEach((key) => queryClientRef.current.invalidateQueries({ queryKey: key }));
+    });
+    return unsubscribeBroadcast;
+  }, []);
+
+  // 2. Serverless-aware EventSource lifecycle
   useEffect(() => {
     let source: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -56,6 +67,8 @@ export function useRealtimeSync() {
     };
 
     const startPolling = () => {
+      // Never poll in background tab
+      if (document.visibilityState === "hidden") return;
       if (pollTimer) return;
       pollTimer = setInterval(invalidateAll, POLL_INTERVAL_MS);
     };
@@ -67,18 +80,24 @@ export function useRealtimeSync() {
       }
     };
 
-    const connect = () => {
-      if (stopped) return;
-
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-
+    const disconnect = () => {
       if (source) {
         source.close();
         source = null;
       }
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      stopPolling();
+    };
+
+    const connect = () => {
+      if (stopped) return;
+      // Do not open serverless SSE connection when the tab is hidden
+      if (document.visibilityState === "hidden") return;
+
+      disconnect();
 
       try {
         source = new EventSource("/api/events");
@@ -103,50 +122,58 @@ export function useRealtimeSync() {
         };
 
         source.onerror = () => {
-          if (source) {
-            source.close();
-            source = null;
-          }
+          disconnect();
           consecutiveFailures += 1;
 
           if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
             startPolling();
           }
 
-          const delay = calculateBackoff(consecutiveFailures);
-          reconnectTimer = setTimeout(connect, delay);
+          if (document.visibilityState === "visible") {
+            const delay = calculateBackoff(consecutiveFailures);
+            reconnectTimer = setTimeout(connect, delay);
+          }
         };
       } catch {
         consecutiveFailures += 1;
-        const delay = calculateBackoff(consecutiveFailures);
-        reconnectTimer = setTimeout(connect, delay);
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        if (!source || source.readyState === EventSource.CLOSED) {
-          connect();
+        if (document.visibilityState === "visible") {
+          const delay = calculateBackoff(consecutiveFailures);
+          reconnectTimer = setTimeout(connect, delay);
         }
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        // Tab is hidden or minimized: disconnect immediately to conserve Vercel memory hours & CPU
+        disconnect();
+      } else if (document.visibilityState === "visible") {
+        // Tab is active again: immediately re-sync data and reconnect
+        invalidateAll();
+        connect();
+      }
+    };
+
     const handleOnline = () => {
-      connect();
+      if (document.visibilityState === "visible") {
+        invalidateAll();
+        connect();
+      }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("online", handleOnline);
 
-    connect();
+    // Initial connection only if page is visible
+    if (document.visibilityState === "visible") {
+      connect();
+    }
 
     return () => {
       stopped = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", handleOnline);
-      if (source) source.close();
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      stopPolling();
+      disconnect();
     };
   }, []);
 }
